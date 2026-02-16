@@ -1,0 +1,25 @@
+{
+  "_comment": "Sizes in KiB. Ranges accommodate minor patch variation. Update after major patches.",
+  "elden_ring": {
+    "exe":              { "min_kb": 112000, "max_kb": 135000 },
+    "steam_api64.dll":  { "min_kb": 258,    "max_kb": 266    },
+    "regulation.bin":   { "min_kb": 40000,  "max_kb": 70000  }
+  },
+  "nightreign": {
+    "exe":              { "min_kb": 115000, "max_kb": 120000 },
+    "steam_api64.dll":  { "min_kb": 285,   "max_kb": 295    },
+    "regulation.bin":   { "min_kb": 1900,  "max_kb": 1960   }
+  },
+  "dark_souls_remastered": {
+    "exe":              { "min_kb": 22000,  "max_kb": 30000  },
+    "steam_api64.dll":  { "min_kb": 258,    "max_kb": 266    }
+  },
+  "dark_souls_2": {
+    "exe":              { "min_kb": 15000,  "max_kb": 22000  },
+    "steam_api64.dll":  { "min_kb": 258,    "max_kb": 266    }
+  },
+  "dark_souls_3": {
+    "exe":              { "min_kb": 35000,  "max_kb": 50000  },
+    "steam_api64.dll":  { "min_kb": 258,    "max_kb": 266    }
+  }
+}
