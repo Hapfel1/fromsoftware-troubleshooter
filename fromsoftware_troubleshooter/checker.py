@@ -27,28 +27,51 @@ class DiagnosticResult:
 
 MANIFEST_URL = (
     "https://raw.githubusercontent.com/Hapfel1/fromsoftware-troubleshooter"
-    "/main/game_file_sizes.json"
+    "/master/game_file_sizes.json"
 )
 _MANIFEST_CACHE: dict | None = None
+
+
+_DEBUG = os.environ.get("FST_DEBUG") == "1"
+
+
+def _dbg(msg: str) -> None:
+    if _DEBUG:
+        print(f"[FST] {msg}")
 
 
 def _load_manifest() -> dict:
     global _MANIFEST_CACHE
     if _MANIFEST_CACHE is not None:
+        _dbg("manifest: using cache")
         return _MANIFEST_CACHE
+    _dbg(f"manifest: fetching from {MANIFEST_URL}")
     try:
         with urllib.request.urlopen(MANIFEST_URL, timeout=3) as resp:
             _MANIFEST_CACHE = json.loads(resp.read().decode())
+            _dbg(f"manifest: loaded from remote, keys={list(_MANIFEST_CACHE.keys())}")
             return _MANIFEST_CACHE
-    except Exception:
-        pass
-    local = Path(__file__).with_name("game_file_sizes.json")
-    if local.exists():
-        try:
-            _MANIFEST_CACHE = json.loads(local.read_text())
-            return _MANIFEST_CACHE
-        except Exception:
-            pass
+    except Exception as e:
+        _dbg(f"manifest: remote fetch failed ({e}), trying local")
+    # Local fallback: check several likely locations
+    candidates = [
+        Path(__file__).with_name("game_file_sizes.json"),  # alongside checker.py
+        Path(__file__).parent.parent
+        / "game_file_sizes.json",  # project root (dev layout)
+        Path.cwd() / "game_file_sizes.json",  # working directory
+    ]
+    for candidate in candidates:
+        _dbg(f"manifest: checking {candidate} — exists={candidate.exists()}")
+        if candidate.exists():
+            try:
+                _MANIFEST_CACHE = json.loads(candidate.read_text())
+                _dbg(
+                    f"manifest: loaded from {candidate}, keys={list(_MANIFEST_CACHE.keys())}"
+                )
+                return _MANIFEST_CACHE
+            except Exception as e:
+                _dbg(f"manifest: failed to parse {candidate} ({e})")
+    _dbg("manifest: all sources failed, returning empty dict")
     return {}
 
 
@@ -99,6 +122,8 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
             message="No app ID configured for this game",
         )
 
+    _dbg(f"build_id check: manifest_key={manifest_key} stored={stored}")
+
     if stored == 0:
         return DiagnosticResult(
             name="Game Version Check",
@@ -107,6 +132,7 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
         )
 
     current = _read_local_build_id(app_id)
+    _dbg(f"build_id check: local ACF build_id={current}")
     if current is None:
         return DiagnosticResult(
             name="Game Version Check",
@@ -1033,12 +1059,6 @@ class DarkSouls3Checker(BaseChecker):
         "winmm.dll",
         "dinput8.dll",
     ]
-
-    def _check_extra(self) -> list[DiagnosticResult]:
-        results: list[DiagnosticResult] = []
-        if self.game_folder and self.game_folder.exists():
-            results.append(self._check_regulation_bin())
-        return results
 
 
 class SekiroChecker(BaseChecker):

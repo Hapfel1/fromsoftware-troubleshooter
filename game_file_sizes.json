@@ -1,5 +1,5 @@
 {
-  "_comment": "Sizes in bytes. Ranges are 1% of the known exact size. build_id is the Steam build ID at time of measurement used to detect game updates.",
+  "_comment": "Sizes in bytes. Ranges are \u00b11% of the known exact size. build_id is the Steam build ID at time of measurement \u2014 used to detect game updates.",
   "elden_ring": {
     "build_id": 21034490,
     "exe": {
