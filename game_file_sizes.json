@@ -1,25 +1,109 @@
 {
-  "_comment": "Sizes in KiB. Ranges accommodate minor patch variation. Update after major patches.",
+  "_comment": "Sizes in bytes. Ranges are 1% of the known exact size. build_id is the Steam build ID at time of measurement used to detect game updates.",
   "elden_ring": {
-    "exe":              { "min_kb": 112000, "max_kb": 135000 },
-    "steam_api64.dll":  { "min_kb": 258,    "max_kb": 266    },
-    "regulation.bin":   { "min_kb": 40000,  "max_kb": 70000  }
+    "build_id": 21034490,
+    "exe": {
+      "exact": 87002704,
+      "min": 86132677,
+      "max": 87872731
+    },
+    "steam_api64.dll": {
+      "exact": 265504,
+      "min": 262849,
+      "max": 268159
+    },
+    "regulation.bin": {
+      "exact": 2036272,
+      "min": 2015909,
+      "max": 2056634
+    }
   },
   "nightreign": {
-    "exe":              { "min_kb": 115000, "max_kb": 120000 },
-    "steam_api64.dll":  { "min_kb": 285,   "max_kb": 295    },
-    "regulation.bin":   { "min_kb": 1900,  "max_kb": 1960   }
+    "build_id": 21385908,
+    "exe": {
+      "exact": 118775416,
+      "min": 117587661,
+      "max": 119963170
+    },
+    "steam_api64.dll": {
+      "exact": 295336,
+      "min": 292382,
+      "max": 298289
+    },
+    "regulation.bin": {
+      "exact": 1974704,
+      "min": 1954957,
+      "max": 1994451
+    }
   },
   "dark_souls_remastered": {
-    "exe":              { "min_kb": 22000,  "max_kb": 30000  },
-    "steam_api64.dll":  { "min_kb": 258,    "max_kb": 266    }
+    "build_id": 10943698,
+    "exe": {
+      "exact": 50286344,
+      "min": 49783480,
+      "max": 50789207
+    },
+    "steam_api64.dll": {
+      "exact": 245536,
+      "min": 243080,
+      "max": 247991
+    }
   },
   "dark_souls_2": {
-    "exe":              { "min_kb": 15000,  "max_kb": 22000  },
-    "steam_api64.dll":  { "min_kb": 258,    "max_kb": 266    }
+    "build_id": 9527516,
+    "exe": {
+      "exact": 28200992,
+      "min": 27918982,
+      "max": 28483001
+    },
+    "steam_api64.dll": {
+      "exact": 119720,
+      "min": 118522,
+      "max": 120917
+    }
   },
   "dark_souls_3": {
-    "exe":              { "min_kb": 35000,  "max_kb": 50000  },
-    "steam_api64.dll":  { "min_kb": 258,    "max_kb": 266    }
+    "build_id": 10167187,
+    "exe": {
+      "exact": 88960032,
+      "min": 88070431,
+      "max": 89849632
+    },
+    "steam_api64.dll": {
+      "exact": 119720,
+      "min": 118522,
+      "max": 120917
+    }
+  },
+  "sekiro": {
+    "build_id": 5794815,
+    "exe": {
+      "exact": 68005144,
+      "min": 67325092,
+      "max": 68685195
+    },
+    "steam_api64.dll": {
+      "exact": 119720,
+      "min": 118522,
+      "max": 120917
+    }
+  },
+  "armored_core_6": {
+    "build_id": 21034069,
+    "exe": {
+      "exact": 111413272,
+      "min": 110299139,
+      "max": 112527404
+    },
+    "steam_api64.dll": {
+      "exact": 295336,
+      "min": 292382,
+      "max": 298289
+    },
+    "regulation.bin": {
+      "exact": 861104,
+      "min": 852493,
+      "max": 869715
+    }
   }
 }
