@@ -25,7 +25,7 @@ a = Analysis(
     hookspath=[],
     runtime_hooks=[],
     excludes=[
-        'html', 'http', 'xmlrpc', 'xml',
+        'xmlrpc', 'xml',
         'unittest', 'doctest', 'pdb', 'pydoc',
         'lib2to3', 'tkinter.test', 'test',
         'multiprocessing', 'concurrent',
