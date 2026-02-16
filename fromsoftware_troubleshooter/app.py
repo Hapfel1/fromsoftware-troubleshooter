@@ -415,7 +415,20 @@ class TroubleshooterApp:
             wraplength=660,
             justify="left",
             text_color=COLORS["fg"],
-        ).pack(anchor="w", padx=12, pady=(0, 6))
+        ).pack(anchor="w", padx=12, pady=(0, 4 if result.bullet_items else 6))
+
+        if result.bullet_items:
+            bullet_frame = ctk.CTkFrame(card, fg_color="transparent")
+            bullet_frame.pack(anchor="w", padx=24, pady=(0, 6))
+            for item in result.bullet_items:
+                ctk.CTkLabel(
+                    bullet_frame,
+                    text=f"  {item}",
+                    font=("Segoe UI", 11),
+                    justify="left",
+                    text_color=COLORS["fg_muted"],
+                    anchor="w",
+                ).pack(anchor="w")
 
         if result.fix_available and result.fix_action:
             fix = ctk.CTkFrame(card, fg_color=COLORS["bg_alt"], corner_radius=6)
