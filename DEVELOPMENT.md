@@ -20,9 +20,3 @@ uv run python main.py
 uv run ruff check
 uv run ruff format
 ```
-
-## Build exe
-```bash
-uv run pyinstaller "FromSoftware Troubleshooter.spec"
-# Output: dist/FromSoftware Troubleshooter.exe
-```
