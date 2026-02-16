@@ -85,26 +85,30 @@ def _ask_yes_no(parent: ctk.CTk, title: str, message: str) -> bool:
     dialog.title(title)
     dialog.resizable(False, False)
     dialog.configure(fg_color=COLORS["bg"])
+    dialog.lift()
+    dialog.attributes("-topmost", True)
 
-    # Size and center on parent
-    w, h = 480, 160
+    w, h = 420, 130
     parent.update_idletasks()
     px = parent.winfo_rootx() + (parent.winfo_width() // 2) - (w // 2)
     py = parent.winfo_rooty() + (parent.winfo_height() // 2) - (h // 2)
     dialog.geometry(f"{w}x{h}+{px}+{py}")
-    dialog.grab_set()
+    dialog.after(50, dialog.grab_set)
+
+    inner = ctk.CTkFrame(dialog, fg_color="transparent")
+    inner.pack(fill="both", expand=True, padx=20, pady=(16, 14))
 
     ctk.CTkLabel(
-        dialog,
+        inner,
         text=message,
         font=("Segoe UI", 12),
-        wraplength=440,
+        wraplength=370,
         justify="left",
         text_color=COLORS["fg"],
-    ).pack(padx=20, pady=(20, 12), anchor="w")
+    ).pack(anchor="w")
 
-    btn_row = ctk.CTkFrame(dialog, fg_color="transparent")
-    btn_row.pack(pady=(0, 16))
+    btn_row = ctk.CTkFrame(inner, fg_color="transparent")
+    btn_row.pack(anchor="w", pady=(14, 0))
 
     def _yes():
         result["v"] = True
@@ -117,24 +121,28 @@ def _ask_yes_no(parent: ctk.CTk, title: str, message: str) -> bool:
     ctk.CTkButton(
         btn_row,
         text="Yes",
-        width=100,
+        width=90,
+        height=30,
         command=_yes,
         fg_color=COLORS["accent"],
         hover_color=COLORS["accent_hover"],
-        text_color=COLORS["bg"],
+        text_color="#1e1e2e",
         font=("Segoe UI", 12, "bold"),
-    ).pack(side="left", padx=6)
+        corner_radius=6,
+    ).pack(side="left", padx=(0, 8))
 
     ctk.CTkButton(
         btn_row,
         text="No",
-        width=100,
+        width=90,
+        height=30,
         command=_no,
         fg_color=COLORS["surface"],
         hover_color=COLORS["surface_alt"],
         text_color=COLORS["fg"],
         font=("Segoe UI", 12),
-    ).pack(side="left", padx=6)
+        corner_radius=6,
+    ).pack(side="left")
 
     dialog.wait_window()
     return result.get("v", False)

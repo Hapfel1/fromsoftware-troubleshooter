@@ -32,11 +32,16 @@ def run(cmd: list[str]) -> None:
 
 
 def build_linux(appimage: bool = False) -> None:
-    run([
-        sys.executable, "-m", "PyInstaller",
-        "--clean", "--noconfirm",
-        "fromsoftware_troubleshooter_linux.spec",
-    ])
+    run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--clean",
+            "--noconfirm",
+            "fromsoftware_troubleshooter_linux.spec",
+        ]
+    )
 
     binary = DIST / EXE_NAME
     if not binary.exists():
@@ -56,7 +61,9 @@ def _make_appimage(binary: Path) -> None:
     # AppDir structure
     (appdir / "usr" / "bin").mkdir(parents=True)
     (appdir / "usr" / "share" / "applications").mkdir(parents=True)
-    (appdir / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps").mkdir(parents=True)
+    (appdir / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps").mkdir(
+        parents=True
+    )
 
     # Copy binary
     dest = appdir / "usr" / "bin" / EXE_NAME
@@ -83,7 +90,16 @@ def _make_appimage(binary: Path) -> None:
 
     # Placeholder icon (appimagetool requires one)
     icon_src = Path("assets") / "icon.png"
-    icon_dst = appdir / "usr" / "share" / "icons" / "hicolor" / "256x256" / "apps" / f"{EXE_NAME}.png"
+    icon_dst = (
+        appdir
+        / "usr"
+        / "share"
+        / "icons"
+        / "hicolor"
+        / "256x256"
+        / "apps"
+        / f"{EXE_NAME}.png"
+    )
     if icon_src.exists():
         shutil.copy2(icon_src, icon_dst)
         shutil.copy2(icon_src, appdir / f"{EXE_NAME}.png")
@@ -100,7 +116,7 @@ def _make_appimage(binary: Path) -> None:
     env["ARCH"] = "x86_64"
     run([str(tool), str(appdir), str(out)])
     out.chmod(out.stat().st_mode | stat.S_IEXEC)
-    print(f"\nAppImage: {out} ({out.stat().st_size // (1024*1024)} MB)")
+    print(f"\nAppImage: {out} ({out.stat().st_size // (1024 * 1024)} MB)")
 
 
 def _get_appimagetool() -> Path:
@@ -121,6 +137,7 @@ def _get_appimagetool() -> Path:
 def _write_minimal_png(path: Path) -> None:
     # Minimal valid 1x1 transparent PNG
     import base64
+
     data = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
         "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -129,17 +146,24 @@ def _write_minimal_png(path: Path) -> None:
 
 
 def build_windows() -> None:
-    run([
-        sys.executable, "-m", "PyInstaller",
-        "--clean", "--noconfirm",
-        "fromsoftware_troubleshooter_windows.spec",
-    ])
+    run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--clean",
+            "--noconfirm",
+            "fromsoftware_troubleshooter_windows.spec",
+        ]
+    )
 
     outdir = DIST / APP_NAME
     if not outdir.exists():
         sys.exit(f"Build failed: {outdir} not found")
 
-    size_mb = sum(f.stat().st_size for f in outdir.rglob("*") if f.is_file()) // (1024 * 1024)
+    size_mb = sum(f.stat().st_size for f in outdir.rglob("*") if f.is_file()) // (
+        1024 * 1024
+    )
     print(f"\nWindows build: {outdir}/ ({size_mb} MB)")
     print("Distribute the entire folder or wrap with Inno Setup / NSIS.")
 
