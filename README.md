@@ -16,7 +16,7 @@ For Vanilla and modded game issues.
 ## Checks
 
 - Game installation & folder
-- Game executable size (detects modified/pirated exes)
+- Game executable size
 - steam_api64.dll integrity
 - regulation.bin validity (where applicable)
 - Problematic running processes (Overwolf, RTSS, Process Lasso, etc.)
