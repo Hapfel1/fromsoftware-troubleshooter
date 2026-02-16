@@ -1,6 +1,7 @@
 # FromSoftware Troubleshooter
 
 Standalone diagnostic tool for FromSoftware PC games.
+For Vanilla and modded game issues.
 
 ## Supported Games
 
@@ -28,7 +29,7 @@ File size ranges are fetched from GitHub and fall back to the bundled
 
 ## Usage
 
-Download `FromSoftware Troubleshooter.exe` from Releases and run it.
+Download the latest Release and choose either Linux or Windows, unpack it and run it.
 Select the game you want to troubleshoot.
 
 ## Building from Source
