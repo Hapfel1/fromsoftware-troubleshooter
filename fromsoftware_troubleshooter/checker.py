@@ -1,4 +1,4 @@
-"""Standalone checker — no er_save_manager dependency."""
+"""Standalone checker."""
 
 from __future__ import annotations
 
