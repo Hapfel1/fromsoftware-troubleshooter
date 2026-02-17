@@ -423,7 +423,7 @@ def autoscan(manifest_key: str) -> tuple[Path | None, Path | None]:
 # Process lists
 # ---------------------------------------------------------------------------
 
-# High confidence — known to cause crashes
+# High confidence — known to cause crashes or EAC issues
 PROBLEMATIC_PROCESSES = [
     # Windows
     "vgtray.exe", "RTSS.exe", "RTSSHooksLoader64.exe",
@@ -452,6 +452,7 @@ VPN_PROCESSES = [
     "Radmin VPN.exe", "RvpnService.exe",
     # Linux
     "nordvpnd", "nordvpn", "expressvpn", "protonvpn",
+    "mullvad", "mullvad-vpn", "mullvad-daemon", "mullvad-gui",
     "windscribe", "windscribed", "openvpn", "openconnect", "wg-quick",
 ]
 
@@ -571,7 +572,8 @@ class BaseChecker:
         if found_folders:
             results.append(DiagnosticResult(
                 name="Unsupported Folders Detected", status="warning",
-                message=f"Found unsupported folders: {', '.join(found_folders)}.",
+                message="Found unsupported folders in the game directory:",
+                bullet_items=list(found_folders),
             ))
 
         found_files: list[str] = []
@@ -596,7 +598,8 @@ class BaseChecker:
         if found_files:
             results.append(DiagnosticResult(
                 name="Unsupported/Damaged Files Detected", status="error",
-                message=f"Found unsupported or modified files: {', '.join(found_files)}.",
+                message="Found unsupported or modified files in the game directory:",
+                bullet_items=list(found_files),
                 fix_available=True,
                 fix_action="Delete the unsupported files and verify game integrity via Steam.",
             ))
