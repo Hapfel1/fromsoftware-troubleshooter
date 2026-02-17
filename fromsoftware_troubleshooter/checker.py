@@ -452,7 +452,6 @@ VPN_PROCESSES = [
     "Radmin VPN.exe", "RvpnService.exe",
     # Linux
     "nordvpnd", "nordvpn", "expressvpn", "protonvpn",
-    "mullvad", "mullvad-vpn", "mullvad-daemon", "mullvad-gui",
     "windscribe", "windscribed", "openvpn", "openconnect", "wg-quick",
 ]
 
