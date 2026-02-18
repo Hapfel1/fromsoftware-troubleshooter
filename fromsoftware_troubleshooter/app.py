@@ -412,16 +412,16 @@ class TroubleshooterApp:
             else:
                 q.put(result)
 
-        emit(check_build_id(checker.MANIFEST_KEY))
         emit(checker._check_game_installation())
+        emit(check_build_id(checker.MANIFEST_KEY))
+        emit(checker._check_steam_running())
         if checker.game_folder and checker.game_folder.exists():
-            emit(checker._check_piracy_indicators())
             emit(checker._check_game_executable())
+            emit(checker._check_extra())  # regulation.bin
+            emit(checker._check_piracy_indicators())  # game integrity
         emit(checker._check_problematic_processes())
         emit(checker._check_vpn_processes())
-        emit(checker._check_steam_running())
         emit(checker._check_steam_elevated())
-        emit(checker._check_extra())
         q.put(_SENTINEL)
 
     def _poll_results(self, thread: threading.Thread) -> None:
