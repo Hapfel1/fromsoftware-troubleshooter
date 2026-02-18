@@ -10,7 +10,6 @@ import warnings
 from pathlib import Path
 
 from cx_Freeze import Executable, setup
-from cx_Freeze.finder import ModuleFinder
 
 
 # Convert PNG to ICO if needed
@@ -50,8 +49,31 @@ build_exe_options = {
     # Compress everything except the main package and customtkinter into library.zip
     "zip_exclude_packages": ["fromsoftware_troubleshooter", "customtkinter"],
     "zip_include_packages": ["*"],
-    # Exclude unused stdlib
-    "excludes": ["unittest", "pydoc", "test", "asyncio", "multiprocessing"],
+    # Exclude unused stdlib modules
+    "excludes": [
+        "unittest",
+        "pydoc",
+        "test",
+        "asyncio",
+        "multiprocessing",
+        "email",
+        "html",
+        "http.server",
+        "xmlrpc",
+        "distutils",
+        "lib2to3",
+        "numpy",
+        "pandas",
+        "matplotlib",
+    ],
+    # Exclude tcl/tk bloat directories
+    "bin_path_excludes": [
+        "tcl/tzdata",
+        "tcl8/tzdata",
+        "tcl8.6/tzdata",
+        "tk/demos",
+        "tk8.6/demos",
+    ],
     "build_exe": f"dist/windows-{VERSION}/{APP_NAME}",
     "optimize": 2,
 }
@@ -68,40 +90,6 @@ executables = [
         icon=str(icon_path),
     )
 ]
-
-# Monkey patch to exclude tcl/tk bloat
-original_include_files = ModuleFinder.include_files
-
-
-def patched_include_files(self, source_path, target_path, copy_dependent_files=True):
-    source_path = Path(source_path)
-    target_path = Path(target_path)
-
-    # Normalize path separators for Windows
-    target_str = str(target_path).replace("\\", "/")
-
-    # Check for share/tcl or lib/tcl directories
-    if (
-        target_str.startswith("share") or target_str.startswith("lib")
-    ) and source_path.is_dir():
-        if "tcl" in source_path.name.lower() or "tk" in source_path.name.lower():
-            for file_path in source_path.rglob("*"):
-                if file_path.is_dir():
-                    continue
-                rel_path = file_path.relative_to(source_path)
-                # Skip tzdata and demos
-                if "tzdata" in rel_path.parts or "demos" in rel_path.parts:
-                    continue
-                final_target = target_path / rel_path
-                original_include_files(
-                    self, file_path, final_target, copy_dependent_files
-                )
-            return
-
-    original_include_files(self, source_path, target_path, copy_dependent_files)
-
-
-ModuleFinder.include_files = patched_include_files
 
 setup(
     name=APP_NAME,
