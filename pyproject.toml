@@ -1,6 +1,6 @@
 [project]
 name = "fromsoftware-troubleshooter"
-version = "1.0.0"
+version = "1.1.0"
 description = "Standalone troubleshooter for FromSoftware games"
 readme = "README.md"
 license = { text = "MIT" }
@@ -12,6 +12,7 @@ keywords = ["elden-ring", "dark-souls", "fromsoftware", "troubleshooter"]
 dependencies = [
     "customtkinter>=5.2",
     "pyperclip>=1.8",
+    "pillow>=10.0",
 ]
 [project.scripts]
 fromsoftware-troubleshooter = "fromsoftware_troubleshooter.app:main"
