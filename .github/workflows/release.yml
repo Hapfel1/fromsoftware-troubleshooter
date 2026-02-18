@@ -52,10 +52,10 @@ jobs:
         run: uv sync --all-groups
 
       - name: Build
-        run: uv run python build.py
+        run: uv run python build_windows_cx.py build
 
       - name: Zip output
-        run: Compress-Archive -Path "dist\FromSoftware Troubleshooter" -DestinationPath "dist\FromSoftware-Troubleshooter-windows.zip"
+        run: Compress-Archive -Path "dist\windows-1.0.0\FromSoftware Troubleshooter" -DestinationPath "dist\FromSoftware-Troubleshooter-windows.zip"
         shell: pwsh
 
       - name: Upload artifact

@@ -22,6 +22,7 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pyinstaller>=6.0",
+    "cx-freeze>=7.0",
     "ruff>=0.8",
 ]
 [tool.ruff]
