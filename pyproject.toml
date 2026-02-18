@@ -9,28 +9,23 @@ authors = [
     { name = "Hapfel1" }
 ]
 keywords = ["elden-ring", "dark-souls", "fromsoftware", "troubleshooter"]
-
 dependencies = [
     "customtkinter>=5.2",
+    "pyperclip>=1.8",
 ]
-
 [project.scripts]
 fromsoftware-troubleshooter = "fromsoftware_troubleshooter.app:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
 [dependency-groups]
 dev = [
     "pyinstaller>=6.0",
     "ruff>=0.8",
 ]
-
 [tool.ruff]
 line-length = 88
 target-version = "py313"
-
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "C4", "UP"]
 ignore = ["E501"]

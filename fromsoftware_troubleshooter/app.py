@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import queue
 import threading
+import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog
 
 import customtkinter as ctk
+import pyperclip
 
 from fromsoftware_troubleshooter.checker import (
     ArmoredCore6Checker,
@@ -164,13 +166,46 @@ class TroubleshooterApp:
         self.root.resizable(True, True)
         self.root.configure(fg_color=COLORS["bg"])
 
-        self._game_var = ctk.StringVar(value="Elden Ring")
+        # Set icon if available
+        icon_path = Path(__file__).parent / "icon.png"
+        if not icon_path.exists():
+            icon_path = Path("icon.png")
+        if icon_path.exists():
+            try:
+                icon_img = tk.PhotoImage(file=str(icon_path))
+                self.root.iconphoto(True, icon_img)
+            except Exception:
+                pass
+
+        self._game_var = ctk.StringVar()
         self._game_folder: Path | None = None
         self._check_thread: threading.Thread | None = None
         self._result_queue: queue.Queue = queue.Queue()
 
         self._build_ui()
+        self._select_initial_game()
         self._on_game_changed()
+
+    def _select_initial_game(self) -> None:
+        """Try ER first, fallback to first installed game."""
+        default_order = [
+            "Elden Ring",
+            "Elden Ring Nightreign",
+            "Dark Souls III",
+            "Dark Souls Remastered",
+            "Dark Souls II: Scholar of the First Sin",
+            "Sekiro: Shadows Die Twice",
+            "Armored Core VI: Fires of Rubicon",
+        ]
+        for game_name in default_order:
+            key = GAME_MANIFEST_KEYS.get(game_name)
+            if key:
+                folder, _ = autoscan(key)
+                if folder:
+                    self._game_var.set(game_name)
+                    return
+        # Nothing found, default to ER anyway
+        self._game_var.set("Elden Ring")
 
     def _build_ui(self) -> None:
         main = ctk.CTkFrame(self.root, fg_color=COLORS["bg"])
@@ -245,6 +280,33 @@ class TroubleshooterApp:
         )
         self._progress.pack(fill="x", pady=(0, 6))
         self._progress.pack_forget()
+
+        # Results header (summary + copy button)
+        results_header = ctk.CTkFrame(main, fg_color="transparent")
+        results_header.pack(fill="x", pady=(0, 4))
+
+        self._summary_label = ctk.CTkLabel(
+            results_header,
+            text="",
+            font=("Segoe UI", 11),
+            text_color=COLORS["fg_muted"],
+            anchor="w",
+        )
+        self._summary_label.pack(side="left")
+
+        self._copy_btn = ctk.CTkButton(
+            results_header,
+            text="Copy to Clipboard",
+            width=130,
+            height=26,
+            command=self._copy_results_to_clipboard,
+            fg_color=COLORS["surface"],
+            hover_color=COLORS["surface_alt"],
+            text_color=COLORS["fg"],
+            font=("Segoe UI", 11),
+        )
+        self._copy_btn.pack(side="right")
+        self._copy_btn.pack_forget()  # Hidden until results exist
 
         # Results
         self.results_frame = ctk.CTkScrollableFrame(
@@ -331,6 +393,8 @@ class TroubleshooterApp:
         checker_cls = GAME_OPTIONS.get(self._game_var.get(), EldenRingChecker)
         checker = checker_cls(game_folder=self._game_folder)
 
+        self._current_results: list[DiagnosticResult] = []
+
         thread = threading.Thread(
             target=self._check_worker,
             args=(checker, self._result_queue),
@@ -355,6 +419,7 @@ class TroubleshooterApp:
             emit(checker._check_game_executable())
         emit(checker._check_problematic_processes())
         emit(checker._check_vpn_processes())
+        emit(checker._check_steam_running())
         emit(checker._check_steam_elevated())
         emit(checker._check_extra())
         q.put(_SENTINEL)
@@ -369,7 +434,9 @@ class TroubleshooterApp:
                     self._progress.stop()
                     self._progress.pack_forget()
                     self._refresh_btn.configure(state="normal")
+                    self._update_summary()
                     return
+                self._current_results.append(item)
                 self._create_result_widget(item)
         except queue.Empty:
             pass
@@ -495,6 +562,86 @@ class TroubleshooterApp:
                     justify="left",
                     text_color=COLORS["fg"],
                 ).pack(anchor="w", padx=8, pady=(0, 6))
+
+    def _update_summary(self) -> None:
+        """Show count of warnings/errors and make copy button visible."""
+        if not self._current_results:
+            self._summary_label.configure(text="")
+            self._copy_btn.pack_forget()
+            return
+
+        counts = {"error": 0, "warning": 0, "info": 0, "ok": 0}
+        for r in self._current_results:
+            counts[r.status] = counts.get(r.status, 0) + 1
+
+        parts = []
+        if counts["error"]:
+            parts.append(f"{counts['error']} error{'s' if counts['error'] > 1 else ''}")
+        if counts["warning"]:
+            parts.append(
+                f"{counts['warning']} warning{'s' if counts['warning'] > 1 else ''}"
+            )
+        if counts["info"]:
+            parts.append(f"{counts['info']} info")
+
+        if parts:
+            self._summary_label.configure(text=" · ".join(parts))
+            self._copy_btn.pack(side="right")
+        else:
+            self._summary_label.configure(text=f"{counts['ok']} checks passed")
+            self._copy_btn.pack(side="right")
+
+    def _copy_results_to_clipboard(self) -> None:
+        """Export warnings/errors/info as text to clipboard (skip 'ok' results)."""
+        if not self._current_results:
+            return
+
+        # Only copy non-ok results, exclude platform-specific unavailable checks
+        relevant = [
+            r
+            for r in self._current_results
+            if r.status != "ok"
+            and not (
+                r.name == "Steam Elevation Check"
+                and "only available on Windows" in r.message
+            )
+        ]
+        if not relevant:
+            # All green, nothing to copy
+            self._copy_btn.configure(text="Nothing to copy")
+            self.root.after(
+                1500, lambda: self._copy_btn.configure(text="Copy to Clipboard")
+            )
+            return
+
+        lines = [
+            f"FromSoftware Troubleshooter — {self._game_var.get()}",
+            "=" * 60,
+            "",
+        ]
+
+        for result in relevant:
+            status_icon = STATUS_ICONS.get(result.status, "?")
+            lines.append(f"[{status_icon}] {result.name}")
+            lines.append(f"    {result.message}")
+            if result.bullet_items:
+                for item in result.bullet_items:
+                    lines.append(f"      • {item}")
+            lines.append("")
+
+        text = "\n".join(lines)
+        try:
+            pyperclip.copy(text)
+            # Flash button to show success
+            orig = self._copy_btn.cget("text")
+            self._copy_btn.configure(text="✓ Copied!")
+            self.root.after(1500, lambda: self._copy_btn.configure(text=orig))
+        except Exception:
+            # Fallback if pyperclip fails
+            self._copy_btn.configure(text="Copy failed")
+            self.root.after(
+                1500, lambda: self._copy_btn.configure(text="Copy to Clipboard")
+            )
 
     def run(self) -> None:
         self.root.mainloop()

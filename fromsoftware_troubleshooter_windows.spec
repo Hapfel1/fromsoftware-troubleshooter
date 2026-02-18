@@ -16,6 +16,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('game_file_sizes.json', '.'),
+        ('icon.png', '.'),
         (str(CTK_PATH / 'assets'), 'customtkinter/assets'),
     ],
     hiddenimports=[
@@ -25,7 +26,7 @@ a = Analysis(
     hookspath=[],
     runtime_hooks=[],
     excludes=[
-        'xmlrpc', 'xml',
+        'email', 'html', 'http', 'xmlrpc', 'xml',
         'unittest', 'doctest', 'pdb', 'pydoc',
         'lib2to3', 'tkinter.test', 'test',
         'multiprocessing', 'concurrent',
@@ -50,7 +51,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     target_arch=None,
     uac_admin=False,
-    icon=None,         # replace with icon='assets/icon.ico' if you have one
+    icon='icon.png',
 )
 
 coll = COLLECT(

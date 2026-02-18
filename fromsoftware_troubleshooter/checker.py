@@ -1,4 +1,4 @@
-"""Standalone checker."""
+"""Standalone checker — no er_save_manager dependency."""
 
 from __future__ import annotations
 
@@ -60,16 +60,19 @@ def _load_manifest() -> dict:
         _dbg(f"manifest: remote fetch failed ({e}), trying local")
     # Local fallback: check several likely locations
     candidates = [
-        Path(__file__).with_name("game_file_sizes.json"),       # alongside checker.py
-        Path(__file__).parent.parent / "game_file_sizes.json",  # project root (dev layout)
-        Path.cwd() / "game_file_sizes.json",                    # working directory
+        Path(__file__).with_name("game_file_sizes.json"),  # alongside checker.py
+        Path(__file__).parent.parent
+        / "game_file_sizes.json",  # project root (dev layout)
+        Path.cwd() / "game_file_sizes.json",  # working directory
     ]
     for candidate in candidates:
         _dbg(f"manifest: checking {candidate} — exists={candidate.exists()}")
         if candidate.exists():
             try:
                 _MANIFEST_CACHE = json.loads(candidate.read_text())
-                _dbg(f"manifest: loaded from {candidate}, keys={list(_MANIFEST_CACHE.keys())}")
+                _dbg(
+                    f"manifest: loaded from {candidate}, keys={list(_MANIFEST_CACHE.keys())}"
+                )
                 return _MANIFEST_CACHE
             except Exception as e:
                 _dbg(f"manifest: failed to parse {candidate} ({e})")
@@ -119,7 +122,8 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
 
     if not app_id:
         return DiagnosticResult(
-            name="Game Version Check", status="info",
+            name="Game Version Check",
+            status="info",
             message="No app ID configured for this game",
         )
 
@@ -127,7 +131,8 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
 
     if stored == 0:
         return DiagnosticResult(
-            name="Game Version Check", status="info",
+            name="Game Version Check",
+            status="info",
             message="No reference build ID recorded — size checks may not reflect the latest patch",
         )
 
@@ -135,13 +140,15 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
     _dbg(f"build_id check: local ACF build_id={current}")
     if current is None:
         return DiagnosticResult(
-            name="Game Version Check", status="info",
+            name="Game Version Check",
+            status="info",
             message="Game not found in Steam libraries — cannot verify build ID",
         )
 
     if current != stored:
         return DiagnosticResult(
-            name="Game Version Check", status="warning",
+            name="Game Version Check",
+            status="warning",
             message=(
                 f"Game has been updated since file sizes were recorded "
                 f"(recorded build {stored}, installed build {current}). "
@@ -150,7 +157,8 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
         )
 
     return DiagnosticResult(
-        name="Game Version Check", status="ok",
+        name="Game Version Check",
+        status="ok",
         message=f"Game is on the expected build ({current})",
     )
 
@@ -178,6 +186,7 @@ def _format_size(size_bytes: int) -> str:
 # Platform helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_windows() -> bool:
     return platform.system() == "Windows"
 
@@ -188,7 +197,8 @@ def _get_running_process_names() -> set[str]:
     if _is_windows():
         try:
             out = subprocess.check_output(
-                ["tasklist", "/FO", "CSV", "/NH"], text=True,
+                ["tasklist", "/FO", "CSV", "/NH"],
+                text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
             for line in out.splitlines():
@@ -224,8 +234,12 @@ def _is_flatpak_steam() -> bool:
         return False
     return (
         Path.home()
-        / ".var" / "app" / "com.valvesoftware.Steam"
-        / ".local" / "share" / "Steam"
+        / ".var"
+        / "app"
+        / "com.valvesoftware.Steam"
+        / ".local"
+        / "share"
+        / "Steam"
     ).exists()
 
 
@@ -236,6 +250,7 @@ def _get_steam_library_folders() -> list[Path]:
     if _is_windows():
         try:
             import winreg
+
             key = winreg.OpenKey(
                 winreg.HKEY_LOCAL_MACHINE,
                 r"SOFTWARE\WOW6432Node\Valve\Steam",
@@ -256,8 +271,14 @@ def _get_steam_library_folders() -> list[Path]:
         for candidate in (
             Path.home() / ".local" / "share" / "Steam" / "steamapps",
             Path.home() / ".steam" / "steam" / "steamapps",
-            Path.home() / ".var" / "app" / "com.valvesoftware.Steam"
-            / ".local" / "share" / "Steam" / "steamapps",
+            Path.home()
+            / ".var"
+            / "app"
+            / "com.valvesoftware.Steam"
+            / ".local"
+            / "share"
+            / "Steam"
+            / "steamapps",
         ):
             if candidate.exists():
                 libraries.append(candidate)
@@ -306,34 +327,34 @@ def _get_steam_library_folders() -> list[Path]:
 # ---------------------------------------------------------------------------
 
 _APP_IDS: dict[str, str] = {
-    "elden_ring":            "1245620",
-    "nightreign":            "2622380",
+    "elden_ring": "1245620",
+    "nightreign": "2622380",
     "dark_souls_remastered": "570940",
-    "dark_souls_2":          "335300",
-    "dark_souls_3":          "374320",
-    "sekiro":                "814380",
-    "armored_core_6":        "1888160",
+    "dark_souls_2": "335300",
+    "dark_souls_3": "374320",
+    "sekiro": "814380",
+    "armored_core_6": "1888160",
 }
 
 # Subfolder inside AppData/Roaming (Windows) or Wine prefix equivalent (Linux)
 _SAVE_ROAMING_SUBPATHS: dict[str, str] = {
-    "elden_ring":            "EldenRing",
-    "nightreign":            "NightReign",
+    "elden_ring": "EldenRing",
+    "nightreign": "NightReign",
     "dark_souls_remastered": "DarkSoulsRemastered",
-    "dark_souls_2":          "DarkSoulsII/SOFTS",
-    "dark_souls_3":          "DarkSoulsIII",
-    "sekiro":                "Sekiro",
-    "armored_core_6":        "ArmoredCore6",
+    "dark_souls_2": "DarkSoulsII/SOFTS",
+    "dark_souls_3": "DarkSoulsIII",
+    "sekiro": "Sekiro",
+    "armored_core_6": "ArmoredCore6",
 }
 
 _SAVE_FILENAMES: dict[str, str] = {
-    "elden_ring":            "ER0000.sl2",
-    "nightreign":            "NR0000.sl2",
+    "elden_ring": "ER0000.sl2",
+    "nightreign": "NR0000.sl2",
     "dark_souls_remastered": "DRAKS0005.sl2",
-    "dark_souls_2":          "DS2SOFS0000.sl2",
-    "dark_souls_3":          "DS30000.sl2",
-    "sekiro":                "S0000.sl2",
-    "armored_core_6":        "AC60000.sl2",
+    "dark_souls_2": "DS2SOFS0000.sl2",
+    "dark_souls_3": "DS30000.sl2",
+    "sekiro": "S0000.sl2",
+    "armored_core_6": "AC60000.sl2",
 }
 
 _BACKUP_EXTENSIONS = {".bak", ".backup", ".backups"}
@@ -381,8 +402,13 @@ def find_save_file(manifest_key: str) -> Path | None:
 
     elif _is_linux():
         wine_roaming = (
-            Path("pfx") / "drive_c" / "users" / "steamuser"
-            / "AppData" / "Roaming" / subpath
+            Path("pfx")
+            / "drive_c"
+            / "users"
+            / "steamuser"
+            / "AppData"
+            / "Roaming"
+            / subpath
         )
         for root in _get_steam_library_folders():
             compat = root / "compatdata" / app_id
@@ -406,8 +432,7 @@ def find_save_file(manifest_key: str) -> Path | None:
             candidates.extend(app_support.rglob(filename))
 
     candidates = [
-        p for p in candidates
-        if p.is_file() and p.suffix not in _BACKUP_EXTENSIONS
+        p for p in candidates if p.is_file() and p.suffix not in _BACKUP_EXTENSIONS
     ]
     if not candidates:
         return None
@@ -426,39 +451,80 @@ def autoscan(manifest_key: str) -> tuple[Path | None, Path | None]:
 # High confidence — known to cause crashes or EAC issues
 PROBLEMATIC_PROCESSES = [
     # Windows
-    "vgtray.exe", "RTSS.exe", "RTSSHooksLoader64.exe",
-    "SystemExplorer.exe", "MSIAfterburner.exe", "SignalRgb.exe",
+    "vgtray.exe",
+    "RTSS.exe",
+    "RTSSHooksLoader64.exe",
+    "SystemExplorer.exe",
+    "MSIAfterburner.exe",
+    "SignalRgb.exe",
     "ProcessLasso.exe",
 ]
 
 # Low confidence — unlikely to cause issues but worth knowing
 INFORMATIONAL_PROCESSES = [
     # Windows
-    "Discord.exe", "Overwolf.exe", "Medal.exe", "GeForceExperience.exe",
-    "XboxGameBar.exe", "GameBarFTServer.exe",
-    "EpicGamesLauncher.exe", "GalaxyClient.exe",
+    "Discord.exe",
+    "Overwolf.exe",
+    "Medal.exe",
+    "GeForceExperience.exe",
+    "XboxGameBar.exe",
+    "GameBarFTServer.exe",
+    "EpicGamesLauncher.exe",
+    "GalaxyClient.exe",
     # Linux
-    "discord", "vesktop", "armcord",
+    "discord",
+    "vesktop",
+    "armcord",
 ]
 
 VPN_PROCESSES = [
     # Windows
-    "NordVPN.exe", "nordvpn-service.exe", "expressvpn.exe", "expressvpnd.exe",
-    "surfshark.exe", "SurfsharkService.exe", "protonvpn.exe", "ProtonVPN.exe",
-    "CyberGhost.exe", "CG7Service.exe", "pia-client.exe", "pia-service.exe",
-    "windscribe.exe", "windscribeservice.exe", "TunnelBear.exe",
-    "TunnelBearService.exe", "hsscp.exe", "IPVanish.exe", "AtlasVPN.exe",
-    "Cloudflare WARP.exe", "warp-svc.exe", "hamachi-2.exe", "hamachi-2-ui.exe",
-    "Radmin VPN.exe", "RvpnService.exe",
+    "NordVPN.exe",
+    "nordvpn-service.exe",
+    "expressvpn.exe",
+    "expressvpnd.exe",
+    "surfshark.exe",
+    "SurfsharkService.exe",
+    "protonvpn.exe",
+    "ProtonVPN.exe",
+    "CyberGhost.exe",
+    "CG7Service.exe",
+    "pia-client.exe",
+    "pia-service.exe",
+    "windscribe.exe",
+    "windscribeservice.exe",
+    "TunnelBear.exe",
+    "TunnelBearService.exe",
+    "hsscp.exe",
+    "IPVanish.exe",
+    "AtlasVPN.exe",
+    "Cloudflare WARP.exe",
+    "warp-svc.exe",
+    "hamachi-2.exe",
+    "hamachi-2-ui.exe",
+    "Radmin VPN.exe",
+    "RvpnService.exe",
     # Linux
-    "nordvpnd", "nordvpn", "expressvpn", "protonvpn",
-    "windscribe", "windscribed", "openvpn", "openconnect", "wg-quick",
+    "nordvpnd",
+    "nordvpn",
+    "expressvpn",
+    "protonvpn",
+    "mullvad",
+    "mullvad-vpn",
+    "mullvad-daemon",
+    "mullvad-gui",
+    "windscribe",
+    "windscribed",
+    "openvpn",
+    "openconnect",
+    "wg-quick",
 ]
 
 
 # ---------------------------------------------------------------------------
 # Base checker
 # ---------------------------------------------------------------------------
+
 
 class BaseChecker:
     GAME_NAME: str = ""
@@ -496,6 +562,7 @@ class BaseChecker:
             results.append(self._check_game_executable())
         results.extend(self._check_problematic_processes())
         results.extend(self._check_vpn_processes())
+        results.append(self._check_steam_running())
         results.append(self._check_steam_elevated())
         if self.save_file_path:
             results.extend(self._check_save_file_health())
@@ -508,16 +575,19 @@ class BaseChecker:
     def _check_game_installation(self) -> DiagnosticResult:
         if not self.game_folder:
             return DiagnosticResult(
-                name="Game Installation", status="warning",
+                name="Game Installation",
+                status="warning",
                 message="Game folder not specified",
             )
         if not self.game_folder.exists():
             return DiagnosticResult(
-                name="Game Installation", status="error",
+                name="Game Installation",
+                status="error",
                 message=f"Game folder not found: {self.game_folder}",
             )
         return DiagnosticResult(
-            name="Game Installation", status="ok",
+            name="Game Installation",
+            status="ok",
             message=f"Game folder found: {self.game_folder}",
         )
 
@@ -530,7 +600,8 @@ class BaseChecker:
         exe_path = game_dir / self.EXE_NAME
         if not exe_path.exists():
             return DiagnosticResult(
-                name="Game Executable", status="error",
+                name="Game Executable",
+                status="error",
                 message=f"{self.EXE_NAME} not found in {game_dir}",
                 fix_available=True,
                 fix_action=f"Verify game integrity via Steam: Right-click {self.GAME_NAME} > Properties > Installed Files > Verify",
@@ -541,13 +612,15 @@ class BaseChecker:
 
         if size_status == "ok":
             return DiagnosticResult(
-                name="Game Executable", status="ok",
+                name="Game Executable",
+                status="ok",
                 message=f"{self.EXE_NAME} found — {_format_size(actual_size)}",
             )
         elif size_status == "warning":
             expected = _format_size(entry["exact"]) if entry else "unknown"
             return DiagnosticResult(
-                name="Game Executable", status="warning",
+                name="Game Executable",
+                status="warning",
                 message=(
                     f"{self.EXE_NAME} size is unexpected.\n"
                     f"Found: {_format_size(actual_size)}\n"
@@ -557,7 +630,8 @@ class BaseChecker:
                 fix_action=f"Verify game integrity via Steam: Right-click {self.GAME_NAME} > Properties > Installed Files > Verify",
             )
         return DiagnosticResult(
-            name="Game Executable", status="info",
+            name="Game Executable",
+            status="info",
             message=f"{self.EXE_NAME} found — {_format_size(actual_size)} (no reference size available)",
         )
 
@@ -569,11 +643,14 @@ class BaseChecker:
 
         found_folders = [f for f in self.PIRACY_FOLDERS if (game_dir / f).exists()]
         if found_folders:
-            results.append(DiagnosticResult(
-                name="Unsupported Folders Detected", status="warning",
-                message="Found unsupported folders in the game directory:",
-                bullet_items=list(found_folders),
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Unsupported Folders Detected",
+                    status="warning",
+                    message="Found unsupported folders in the game directory:",
+                    bullet_items=list(found_folders),
+                )
+            )
 
         found_files: list[str] = []
         for f in self.PIRACY_FILES:
@@ -582,31 +659,44 @@ class BaseChecker:
 
         steam_api = game_dir / "steam_api64.dll"
         if steam_api.exists():
-            size_status = _check_file_size(steam_api, self.MANIFEST_KEY, "steam_api64.dll")
+            size_status = _check_file_size(
+                steam_api, self.MANIFEST_KEY, "steam_api64.dll"
+            )
             if size_status == "warning":
                 actual = steam_api.stat().st_size
-                found_files.append(f"steam_api64.dll (unexpected size: {actual:,} bytes)")
+                found_files.append(
+                    f"steam_api64.dll (unexpected size: {actual:,} bytes)"
+                )
         else:
-            results.append(DiagnosticResult(
-                name="Critical File Missing", status="error",
-                message="steam_api64.dll is missing from game folder",
-                fix_available=True,
-                fix_action=f"Verify game integrity via Steam: Right-click {self.GAME_NAME} > Properties > Installed Files > Verify",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Critical File Missing",
+                    status="error",
+                    message="steam_api64.dll is missing from game folder",
+                    fix_available=True,
+                    fix_action=f"Verify game integrity via Steam: Right-click {self.GAME_NAME} > Properties > Installed Files > Verify",
+                )
+            )
 
         if found_files:
-            results.append(DiagnosticResult(
-                name="Unsupported/Damaged Files Detected", status="error",
-                message="Found unsupported or modified files in the game directory:",
-                bullet_items=list(found_files),
-                fix_available=True,
-                fix_action="Delete the unsupported files and verify game integrity via Steam.",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Unsupported/Damaged Files Detected",
+                    status="error",
+                    message="Found unsupported or modified files in the game directory:",
+                    bullet_items=list(found_files),
+                    fix_available=True,
+                    fix_action="Delete the unsupported files and verify game integrity via Steam.",
+                )
+            )
         else:
-            results.append(DiagnosticResult(
-                name="Game Integrity", status="ok",
-                message="No integrity issues detected",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Game Integrity",
+                    status="ok",
+                    message="No integrity issues detected",
+                )
+            )
         return results
 
     def _check_regulation_bin(self) -> DiagnosticResult:
@@ -618,7 +708,8 @@ class BaseChecker:
         regulation = game_dir / "regulation.bin"
         if not regulation.exists():
             return DiagnosticResult(
-                name="Critical File Missing", status="error",
+                name="Critical File Missing",
+                status="error",
                 message="regulation.bin is missing from game folder",
                 fix_available=True,
                 fix_action=f"Verify game integrity via Steam: Right-click {self.GAME_NAME} > Properties > Installed Files > Verify",
@@ -629,13 +720,15 @@ class BaseChecker:
 
         if size_status == "ok":
             return DiagnosticResult(
-                name="Regulation File", status="ok",
+                name="Regulation File",
+                status="ok",
                 message=f"regulation.bin is valid — {_format_size(actual_size)}",
             )
         elif size_status == "warning":
             expected = _format_size(entry["exact"]) if entry else "unknown"
             return DiagnosticResult(
-                name="Regulation File", status="warning",
+                name="Regulation File",
+                status="warning",
                 message=(
                     f"regulation.bin size is unexpected. May indicate modified game files.\n"
                     f"Found: {_format_size(actual_size)}\n"
@@ -645,7 +738,8 @@ class BaseChecker:
                 fix_action="Delete the file and verify game integrity via Steam.",
             )
         return DiagnosticResult(
-            name="Regulation File", status="info",
+            name="Regulation File",
+            status="info",
             message=f"regulation.bin found — {_format_size(actual_size)} (no reference size available)",
         )
 
@@ -653,21 +747,33 @@ class BaseChecker:
         try:
             running_names = _get_running_process_names()
         except Exception as e:
-            return [DiagnosticResult(
-                name="Process Check", status="warning",
-                message=f"Could not check processes: {e}",
-            )]
+            return [
+                DiagnosticResult(
+                    name="Process Check",
+                    status="warning",
+                    message=f"Could not check processes: {e}",
+                )
+            ]
 
-        running = [p for p in PROBLEMATIC_PROCESSES if p.lower().replace(".exe", "") in
-                   {n.replace(".exe", "") for n in running_names}]
-        info_running = [p for p in INFORMATIONAL_PROCESSES if p.lower().replace(".exe", "") in
-                        {n.replace(".exe", "") for n in running_names}]
+        running = [
+            p
+            for p in PROBLEMATIC_PROCESSES
+            if p.lower().replace(".exe", "")
+            in {n.replace(".exe", "") for n in running_names}
+        ]
+        info_running = [
+            p
+            for p in INFORMATIONAL_PROCESSES
+            if p.lower().replace(".exe", "")
+            in {n.replace(".exe", "") for n in running_names}
+        ]
 
         process_lasso_scheduled = False
         if _is_windows():
             try:
                 schtasks = subprocess.check_output(
-                    ["schtasks", "/query", "/fo", "LIST", "/v"], text=True,
+                    ["schtasks", "/query", "/fo", "LIST", "/v"],
+                    text=True,
                     creationflags=subprocess.CREATE_NO_WINDOW,
                 )
                 if "processlasso" in schtasks.lower():
@@ -678,37 +784,51 @@ class BaseChecker:
         results: list[DiagnosticResult] = []
 
         if running:
-            fix = ("Close these apps before playing, and disable them in Task Manager > Startup tab."
-                   if _is_windows() else
-                   "Close these apps before launching the game.")
-            results.append(DiagnosticResult(
-                name="Problematic Processes Running", status="warning",
-                message="The following processes can cause crashes or connection issues:",
-                bullet_items=list(running),
-                fix_available=True,
-                fix_action=fix,
-            ))
+            fix = (
+                "Close these apps before playing, and disable them in Task Manager > Startup tab."
+                if _is_windows()
+                else "Close these apps before launching the game."
+            )
+            results.append(
+                DiagnosticResult(
+                    name="Problematic Processes Running",
+                    status="warning",
+                    message="The following processes can cause crashes or connection issues:",
+                    bullet_items=list(running),
+                    fix_available=True,
+                    fix_action=fix,
+                )
+            )
 
         if any("processlasso" in p.lower() for p in running) or process_lasso_scheduled:
-            results.append(DiagnosticResult(
-                name="Process Lasso Detected", status="error",
-                message="Process Lasso can cause flashbang crashes on launch.",
-                fix_available=True,
-                fix_action="1. Close Process Lasso if running\n2. Disable in Task Manager > Startup tab\n3. Remove from Task Scheduler > Task Scheduler Library",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Process Lasso Detected",
+                    status="error",
+                    message="Process Lasso can cause flashbang crashes on launch.",
+                    fix_available=True,
+                    fix_action="1. Close Process Lasso if running\n2. Disable in Task Manager > Startup tab\n3. Remove from Task Scheduler > Task Scheduler Library",
+                )
+            )
 
         if info_running:
-            results.append(DiagnosticResult(
-                name="Low-Priority Processes", status="info",
-                message="These are running but very unlikely to cause issues:",
-                bullet_items=list(info_running),
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Low-Priority Processes",
+                    status="info",
+                    message="These are running but very unlikely to cause issues:",
+                    bullet_items=list(info_running),
+                )
+            )
 
         if not running and not process_lasso_scheduled:
-            results.append(DiagnosticResult(
-                name="Process Check", status="ok",
-                message="No problematic processes detected",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Process Check",
+                    status="ok",
+                    message="No problematic processes detected",
+                )
+            )
 
         return results
 
@@ -716,10 +836,13 @@ class BaseChecker:
         try:
             running_names = _get_running_process_names()
         except Exception as e:
-            return [DiagnosticResult(
-                name="VPN Check", status="warning",
-                message=f"Could not check for VPN processes: {e}",
-            )]
+            return [
+                DiagnosticResult(
+                    name="VPN Check",
+                    status="warning",
+                    message=f"Could not check for VPN processes: {e}",
+                )
+            ]
 
         seen: set[str] = set()
         running_vpns: list[str] = []
@@ -732,7 +855,9 @@ class BaseChecker:
                 continue
             # Match exact name or prefix (catches mullvad-daemon matching "mullvad" entry)
             matched = proc_norm in normalised_running or any(
-                n == proc_norm or n.startswith(proc_norm + "-") or proc_norm.startswith(n + "-")
+                n == proc_norm
+                or n.startswith(proc_norm + "-")
+                or proc_norm.startswith(n + "-")
                 for n in normalised_running
             )
             if matched:
@@ -740,21 +865,54 @@ class BaseChecker:
                 running_vpns.append(proc_norm)
 
         if running_vpns:
-            return [DiagnosticResult(
-                name="VPN Detected", status="warning",
-                message="Active VPN client(s) detected — may cause multiplayer issues:",
-                bullet_items=running_vpns,
-                fix_available=True,
-                fix_action="Disable or exit your VPN before playing online.",
-            )]
-        return [DiagnosticResult(
-            name="VPN Check", status="ok", message="No VPN clients detected",
-        )]
+            return [
+                DiagnosticResult(
+                    name="VPN Detected",
+                    status="warning",
+                    message="Active VPN client(s) detected — may cause multiplayer issues:",
+                    bullet_items=running_vpns,
+                    fix_available=True,
+                    fix_action="Disable or exit your VPN before playing online.",
+                )
+            ]
+        return [
+            DiagnosticResult(
+                name="VPN Check",
+                status="ok",
+                message="No VPN clients detected",
+            )
+        ]
+
+    def _check_steam_running(self) -> DiagnosticResult:
+        """Check if Steam is running (cross-platform)."""
+        try:
+            running_names = _get_running_process_names()
+        except Exception:
+            return DiagnosticResult(
+                name="Steam Status",
+                status="info",
+                message="Could not check if Steam is running",
+            )
+
+        steam_running = any("steam" in name for name in running_names)
+
+        if steam_running:
+            return DiagnosticResult(
+                name="Steam Status",
+                status="ok",
+                message="Steam is running",
+            )
+        return DiagnosticResult(
+            name="Steam Status",
+            status="info",
+            message="Steam is not currently running",
+        )
 
     def _check_steam_elevated(self) -> DiagnosticResult:
         if not _is_windows():
             return DiagnosticResult(
-                name="Steam Elevation Check", status="info",
+                name="Steam Elevation Check",
+                status="info",
                 message="Steam elevation check only available on Windows",
             )
         ps_script = """
@@ -793,8 +951,10 @@ class BaseChecker:
         try:
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_script],
-                capture_output=True, text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW, timeout=5,
+                capture_output=True,
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                timeout=5,
             )
             output = ""
             for line in reversed(result.stdout.strip().split("\n")):
@@ -802,12 +962,13 @@ class BaseChecker:
                 if stripped and not stripped.startswith("debug:"):
                     output = stripped
                     break
-            if output == "not_running":
-                return DiagnosticResult(
-                    name="Steam Elevation Check", status="info",
-                    message="Steam is not currently running",
-                )
-            elif output == "elevated":
+            if output == "not_running" or output == "elevated":
+                if output == "not_running":
+                    return DiagnosticResult(
+                        name="Steam Elevation Check",
+                        status="info",
+                        message="Steam is not running (elevation check skipped)",
+                    )
                 appdata_path = Path(os.environ.get("APPDATA", "")) / self.GAME_NAME
                 fix_message = (
                     "Steam is running with administrator privileges.\n\n"
@@ -820,74 +981,100 @@ class BaseChecker:
                     f'icacls "{appdata_path}" /grant %USERNAME%:F /T'
                 )
                 return DiagnosticResult(
-                    name="Steam Running as Administrator", status="error",
+                    name="Steam Running as Administrator",
+                    status="error",
                     message="Steam is running with elevated privileges. This can cause save file permission issues.",
-                    fix_available=True, fix_action=fix_message,
+                    fix_available=True,
+                    fix_action=fix_message,
                 )
             elif output == "normal":
                 return DiagnosticResult(
-                    name="Steam Elevation Check", status="ok",
+                    name="Steam Elevation Check",
+                    status="ok",
                     message="Steam is running with normal privileges",
                 )
             return DiagnosticResult(
-                name="Steam Elevation Check", status="warning",
+                name="Steam Elevation Check",
+                status="warning",
                 message="Could not determine if Steam is elevated",
             )
         except subprocess.TimeoutExpired:
             return DiagnosticResult(
-                name="Steam Elevation Check", status="warning",
+                name="Steam Elevation Check",
+                status="warning",
                 message="Steam elevation check timed out",
             )
         except Exception as e:
             return DiagnosticResult(
-                name="Steam Elevation Check", status="warning",
+                name="Steam Elevation Check",
+                status="warning",
                 message=f"Could not check Steam elevation: {e}",
             )
 
     def _check_save_file_health(self) -> list[DiagnosticResult]:
         results: list[DiagnosticResult] = []
         if not self.save_file_path or not self.save_file_path.exists():
-            return [DiagnosticResult(
-                name="Save File",
-                status="error" if self.save_file_path else "info",
-                message=f"Save file not found: {self.save_file_path}"
-                if self.save_file_path else "No save file loaded",
-            )]
+            return [
+                DiagnosticResult(
+                    name="Save File",
+                    status="error" if self.save_file_path else "info",
+                    message=f"Save file not found: {self.save_file_path}"
+                    if self.save_file_path
+                    else "No save file loaded",
+                )
+            ]
         if not os.access(self.save_file_path, os.R_OK):
-            results.append(DiagnosticResult(
-                name="Save File Permissions", status="error",
-                message="Cannot read save file — check file permissions",
-                fix_available=True,
-                fix_action="Run as administrator or check file permissions",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Save File Permissions",
+                    status="error",
+                    message="Cannot read save file — check file permissions",
+                    fix_available=True,
+                    fix_action="Run as administrator or check file permissions",
+                )
+            )
         else:
-            results.append(DiagnosticResult(
-                name="Save File Permissions", status="ok",
-                message="Save file is readable",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Save File Permissions",
+                    status="ok",
+                    message="Save file is readable",
+                )
+            )
         file_size = self.save_file_path.stat().st_size
         if file_size < 1000:
-            results.append(DiagnosticResult(
-                name="Save File Size", status="error",
-                message=f"Save file suspiciously small ({file_size:,} bytes) — may be corrupted",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Save File Size",
+                    status="error",
+                    message=f"Save file suspiciously small ({file_size:,} bytes) — may be corrupted",
+                )
+            )
         else:
-            results.append(DiagnosticResult(
-                name="Save File Size", status="ok",
-                message=f"Save file size: {_format_size(file_size)}",
-            ))
+            results.append(
+                DiagnosticResult(
+                    name="Save File Size",
+                    status="ok",
+                    message=f"Save file size: {_format_size(file_size)}",
+                )
+            )
         if _is_windows():
             try:
                 import shutil
+
                 _, _, free = shutil.disk_usage(self.save_file_path.parent)
-                free_gb = free // (1024 ** 3)
-                results.append(DiagnosticResult(
-                    name="Disk Space",
-                    status="warning" if free_gb < 1 else "ok",
-                    message=f"{'Low disk space' if free_gb < 1 else 'Sufficient disk space'}: {free_gb} GB free",
-                    fix_available=free_gb < 1,
-                    fix_action="Free up disk space for save backups" if free_gb < 1 else "",
-                ))
+                free_gb = free // (1024**3)
+                results.append(
+                    DiagnosticResult(
+                        name="Disk Space",
+                        status="warning" if free_gb < 1 else "ok",
+                        message=f"{'Low disk space' if free_gb < 1 else 'Sufficient disk space'}: {free_gb} GB free",
+                        fix_available=free_gb < 1,
+                        fix_action="Free up disk space for save backups"
+                        if free_gb < 1
+                        else "",
+                    )
+                )
             except Exception:
                 pass
         return results
@@ -897,6 +1084,7 @@ class BaseChecker:
 # Game subclasses
 # ---------------------------------------------------------------------------
 
+
 class EldenRingChecker(BaseChecker):
     GAME_NAME = "Elden Ring"
     MANIFEST_KEY = "elden_ring"
@@ -905,8 +1093,13 @@ class EldenRingChecker(BaseChecker):
     GAME_SUBFOLDER = "Game"
     PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST"]
     PIRACY_FILES = [
-        "dlllist.txt", "OnlineFix.ini", "OnlineFix64.dll",
-        "steam_api64.rne", "steam_emu.ini", "winmm.dll", "dinput8.dll",
+        "dlllist.txt",
+        "OnlineFix.ini",
+        "OnlineFix64.dll",
+        "steam_api64.rne",
+        "steam_emu.ini",
+        "winmm.dll",
+        "dinput8.dll",
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
@@ -924,8 +1117,13 @@ class NightReignChecker(BaseChecker):
     GAME_SUBFOLDER = "Game"
     PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide"]
     PIRACY_FILES = [
-        "dlllist.txt", "OnlineFix.ini", "OnlineFix64.dll",
-        "steam_api64.rne", "steam_emu.ini", "winmm.dll", "dinput8.dll",
+        "dlllist.txt",
+        "OnlineFix.ini",
+        "OnlineFix64.dll",
+        "steam_api64.rne",
+        "steam_emu.ini",
+        "winmm.dll",
+        "dinput8.dll",
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
@@ -943,8 +1141,12 @@ class DarkSouls1Checker(BaseChecker):
     GAME_SUBFOLDER = ""  # flat — files sit directly in install root
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
-        "dlllist.txt", "OnlineFix.ini", "OnlineFix64.dll",
-        "steam_api64.rne", "steam_emu.ini", "winmm.dll",
+        "dlllist.txt",
+        "OnlineFix.ini",
+        "OnlineFix64.dll",
+        "steam_api64.rne",
+        "steam_emu.ini",
+        "winmm.dll",
     ]
 
 
@@ -956,8 +1158,12 @@ class DarkSouls2Checker(BaseChecker):
     GAME_SUBFOLDER = "Game"
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
-        "dlllist.txt", "OnlineFix.ini", "OnlineFix64.dll",
-        "steam_api64.rne", "steam_emu.ini", "winmm.dll",
+        "dlllist.txt",
+        "OnlineFix.ini",
+        "OnlineFix64.dll",
+        "steam_api64.rne",
+        "steam_emu.ini",
+        "winmm.dll",
     ]
 
 
@@ -969,9 +1175,15 @@ class DarkSouls3Checker(BaseChecker):
     GAME_SUBFOLDER = "Game"
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
-        "dlllist.txt", "OnlineFix.ini", "OnlineFix64.dll",
-        "steam_api64.rne", "steam_emu.ini", "winmm.dll", "dinput8.dll",
+        "dlllist.txt",
+        "OnlineFix.ini",
+        "OnlineFix64.dll",
+        "steam_api64.rne",
+        "steam_emu.ini",
+        "winmm.dll",
+        "dinput8.dll",
     ]
+
 
 class SekiroChecker(BaseChecker):
     GAME_NAME = "Sekiro: Shadows Die Twice"
@@ -981,8 +1193,12 @@ class SekiroChecker(BaseChecker):
     GAME_SUBFOLDER = ""  # flat — files sit directly in install root
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
-        "dlllist.txt", "OnlineFix.ini", "OnlineFix64.dll",
-        "steam_api64.rne", "steam_emu.ini", "winmm.dll",
+        "dlllist.txt",
+        "OnlineFix.ini",
+        "OnlineFix64.dll",
+        "steam_api64.rne",
+        "steam_emu.ini",
+        "winmm.dll",
     ]
 
 
@@ -994,8 +1210,13 @@ class ArmoredCore6Checker(BaseChecker):
     GAME_SUBFOLDER = "Game"
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
-        "dlllist.txt", "OnlineFix.ini", "OnlineFix64.dll",
-        "steam_api64.rne", "steam_emu.ini", "winmm.dll", "dinput8.dll",
+        "dlllist.txt",
+        "OnlineFix.ini",
+        "OnlineFix64.dll",
+        "steam_api64.rne",
+        "steam_emu.ini",
+        "winmm.dll",
+        "dinput8.dll",
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
