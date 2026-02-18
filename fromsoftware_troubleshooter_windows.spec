@@ -1,7 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Windows — onedir
-# onefile is avoided on Windows: the self-extracting stub triggers AV heuristics.
-# Ship the dist/fromsoftware-troubleshooter/ folder or wrap it in an NSIS/Inno installer.
+# Windows — onefile
 
 import os
 import sys
@@ -41,26 +39,17 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='FromSoftware Troubleshooter',
     debug=False,
-    strip=False,       # don't strip on Windows — breaks some DLLs
-    upx=False,         # UPX on Windows EXEs is a major AV trigger
+    strip=False,
+    upx=False,
     console=False,
     bootloader_ignore_signals=False,
     target_arch=None,
     uac_admin=False,
     icon='icon.png',
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name='FromSoftware Troubleshooter',
 )
