@@ -2,7 +2,7 @@
 Build script for Windows using cx_Freeze.
 
 Usage:
-    uv run python build_windows_cx.py
+    uv run python build_windows_cx.py build
 """
 
 import sys
@@ -11,6 +11,23 @@ from pathlib import Path
 
 from cx_Freeze import Executable, setup
 from cx_Freeze.finder import ModuleFinder
+
+
+# Convert PNG to ICO if needed
+def ensure_ico(png_path: Path) -> Path:
+    ico_path = png_path.with_suffix(".ico")
+    if not ico_path.exists():
+        try:
+            from PIL import Image
+
+            img = Image.open(png_path)
+            img.save(ico_path, format="ICO", sizes=[(256, 256)])
+            print(f"Converted {png_path} -> {ico_path}")
+        except Exception as e:
+            print(f"Warning: Could not convert icon: {e}")
+            return png_path
+    return ico_path
+
 
 if sys.platform != "win32":
     sys.exit("This script must be run on Windows.")
@@ -41,12 +58,14 @@ build_exe_options = {
 
 base = "gui"
 
+icon_path = ensure_ico(Path("icon.png"))
+
 executables = [
     Executable(
         "main.py",
         base=base,
         target_name=APP_NAME,
-        icon="icon.png",
+        icon=str(icon_path),
     )
 ]
 
@@ -58,8 +77,14 @@ def patched_include_files(self, source_path, target_path, copy_dependent_files=T
     source_path = Path(source_path)
     target_path = Path(target_path)
 
-    if str(target_path).startswith("lib") and source_path.is_dir():
-        if "tcl" in source_path.name or "tk" in source_path.name:
+    # Normalize path separators for Windows
+    target_str = str(target_path).replace("\\", "/")
+
+    # Check for share/tcl or lib/tcl directories
+    if (
+        target_str.startswith("share") or target_str.startswith("lib")
+    ) and source_path.is_dir():
+        if "tcl" in source_path.name.lower() or "tk" in source_path.name.lower():
             for file_path in source_path.rglob("*"):
                 if file_path.is_dir():
                     continue
