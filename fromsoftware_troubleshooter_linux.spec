@@ -25,11 +25,11 @@ a = Analysis(
     hookspath=[],
     runtime_hooks=[],
     excludes=[
-        'email', 'html', 'http', 'xmlrpc', 'xml',
+        'html', 'xmlrpc',
         'unittest', 'doctest', 'pdb', 'pydoc',
         'lib2to3', 'tkinter.test', 'test',
         'multiprocessing', 'concurrent',
-        'asyncio', 'ssl', 'sqlite3',
+        'asyncio', 'sqlite3',
         'numpy', 'pandas', 'matplotlib',
     ],
     noarchive=False,
