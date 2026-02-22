@@ -1012,7 +1012,7 @@ class BaseChecker:
                 return DiagnosticResult(
                     name="Steam Running as Administrator",
                     status="error",
-                    message="Steam is running with elevated privileges. This can cause save file permission issues.",
+                    message="Steam is running with elevated privileges. This causes permission issues.",
                     fix_available=True,
                     fix_action=fix_message,
                 )
