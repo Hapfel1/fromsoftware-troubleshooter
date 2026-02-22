@@ -1,4 +1,4 @@
-"""Standalone checker."""
+"""Standalone checker — no er_save_manager dependency."""
 
 from __future__ import annotations
 
@@ -458,6 +458,24 @@ PROBLEMATIC_PROCESSES = [
     "MSIAfterburner.exe",
     "SignalRgb.exe",
     "ProcessLasso.exe",
+    # Problematic antiviruses (known to cause crashes, false bans, or performance issues)
+    "avira.exe",
+    "avgui.exe",
+    "AviraOptimizerHost.exe",
+    "AviraSecurityCenterAgent.exe",
+    "Norton.exe",
+    "NortonSecurity.exe",
+    "avast.exe",
+    "AvastUI.exe",
+    "AvastSvc.exe",
+    "avgnt.exe",
+    "avgui.exe",
+    "AVGSvc.exe",
+    "mcshield.exe",
+    "mcuicnt.exe",  # McAfee
+    "ekrn.exe",
+    "egui.exe",  # ESET
+    "TrusteerEndpointProtection.exe",  # Trusteer Rapport
 ]
 
 # Low confidence — unlikely to cause issues but worth knowing
@@ -653,9 +671,22 @@ class BaseChecker:
             )
 
         found_files: list[str] = []
+        # Check game_dir, parent, and immediate subdirectories (piracy files can be anywhere)
+        search_dirs = [(game_dir, "")]
+        if game_dir.parent != game_dir:
+            search_dirs.append((game_dir.parent, "../"))
+        # Check immediate subdirectories (some repacks nest folders)
+        for subdir in game_dir.iterdir():
+            if subdir.is_dir() and not subdir.name.startswith("."):
+                search_dirs.append((subdir, f"{subdir.name}/"))
+
         for f in self.PIRACY_FILES:
-            if (game_dir / f).exists():
-                found_files.append(f)
+            for search_dir, prefix in search_dirs:
+                if (search_dir / f).exists():
+                    rel_path = f"{prefix}{f}" if prefix else f
+                    if rel_path not in found_files:
+                        found_files.append(rel_path)
+                    break
 
         steam_api = game_dir / "steam_api64.dll"
         if steam_api.exists():

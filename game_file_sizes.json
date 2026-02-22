@@ -1,109 +1,109 @@
 {
-  "_comment": "Sizes in bytes. Ranges are 1% of the known exact size. build_id is the Steam build ID at time of measurement used to detect game updates.",
+  "_comment": "Sizes in bytes with 10 byte tolerance for DLL version variations. build_id is Steam build ID at measurement time.",
   "elden_ring": {
     "build_id": 21034490,
     "exe": {
       "exact": 87002704,
-      "min": 86132677,
-      "max": 87872731
+      "min": 87002694,
+      "max": 87002714
     },
     "steam_api64.dll": {
       "exact": 265504,
-      "min": 262849,
-      "max": 268159
+      "min": 265494,
+      "max": 265514
     },
     "regulation.bin": {
       "exact": 2036272,
-      "min": 2015909,
-      "max": 2056634
+      "min": 2036262,
+      "max": 2036282
     }
   },
   "nightreign": {
     "build_id": 21385908,
     "exe": {
       "exact": 118775416,
-      "min": 117587661,
-      "max": 119963170
+      "min": 118775406,
+      "max": 118775426
     },
     "steam_api64.dll": {
       "exact": 295336,
-      "min": 292382,
-      "max": 298289
+      "min": 295326,
+      "max": 295346
     },
     "regulation.bin": {
       "exact": 1974704,
-      "min": 1954957,
-      "max": 1994451
+      "min": 1974694,
+      "max": 1974714
     }
   },
   "dark_souls_remastered": {
     "build_id": 10943698,
     "exe": {
       "exact": 50286344,
-      "min": 49783480,
-      "max": 50789207
+      "min": 50286334,
+      "max": 50286354
     },
     "steam_api64.dll": {
       "exact": 245536,
-      "min": 243080,
-      "max": 247991
+      "min": 245526,
+      "max": 245546
     }
   },
   "dark_souls_2": {
     "build_id": 9527516,
     "exe": {
       "exact": 28200992,
-      "min": 27918982,
-      "max": 28483001
+      "min": 28200982,
+      "max": 28201002
     },
     "steam_api64.dll": {
       "exact": 119720,
-      "min": 118522,
-      "max": 120917
+      "min": 119710,
+      "max": 119730
     }
   },
   "dark_souls_3": {
     "build_id": 10167187,
     "exe": {
       "exact": 88960032,
-      "min": 88070431,
-      "max": 89849632
+      "min": 88960022,
+      "max": 88960042
     },
     "steam_api64.dll": {
       "exact": 119720,
-      "min": 118522,
-      "max": 120917
+      "min": 119710,
+      "max": 119730
     }
   },
   "sekiro": {
     "build_id": 5794815,
     "exe": {
       "exact": 68005144,
-      "min": 67325092,
-      "max": 68685195
+      "min": 68005134,
+      "max": 68005154
     },
     "steam_api64.dll": {
       "exact": 119720,
-      "min": 118522,
-      "max": 120917
+      "min": 119710,
+      "max": 119730
     }
   },
   "armored_core_6": {
     "build_id": 21034069,
     "exe": {
       "exact": 111413272,
-      "min": 110299139,
-      "max": 112527404
+      "min": 111413262,
+      "max": 111413282
     },
     "steam_api64.dll": {
       "exact": 295336,
-      "min": 292382,
-      "max": 298289
+      "min": 295326,
+      "max": 295346
     },
     "regulation.bin": {
       "exact": 861104,
-      "min": 852493,
-      "max": 869715
+      "min": 861094,
+      "max": 861114
     }
   }
 }
