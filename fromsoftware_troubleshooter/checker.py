@@ -458,7 +458,7 @@ PROBLEMATIC_PROCESSES = [
     "MSIAfterburner.exe",
     "SignalRgb.exe",
     "ProcessLasso.exe",
-    # Problematic antiviruses (known to cause crashes, false bans, or performance issues)
+    # Problematic antiviruses (known to cause crashes or performance issues)
     "avira.exe",
     "avgui.exe",
     "AviraOptimizerHost.exe",
@@ -489,10 +489,8 @@ INFORMATIONAL_PROCESSES = [
     "GameBarFTServer.exe",
     "EpicGamesLauncher.exe",
     "GalaxyClient.exe",
-    # Linux
-    "discord",
-    "vesktop",
-    "armcord",
+    "Vesktop.exe",
+    "Armcord.exe",
 ]
 
 VPN_PROCESSES = [
