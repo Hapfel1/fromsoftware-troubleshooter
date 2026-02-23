@@ -448,7 +448,7 @@ def autoscan(manifest_key: str) -> tuple[Path | None, Path | None]:
 # Process lists
 # ---------------------------------------------------------------------------
 
-# High confidence - known to cause crashes or issues
+# High confidence - known to cause crashes or EAC issues
 PROBLEMATIC_PROCESSES = [
     # Windows
     "vgtray.exe",
@@ -1012,8 +1012,9 @@ class BaseChecker:
                     f'takeown /F "{appdata_path}" /R /D Y\n'
                     f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
                     "5. If issues persist:\n"
-                    "   • Reinstall Steam (not uninstall, just run installer again)\n"
-                    "   • OR: Uninstall the game, manually delete the Game folder, reinstall"
+                    "   • Reinstall Steam (download installer from steampowered.com and run)\n"
+                    "   • OR: In Steam, uninstall game, then manually delete entire folder at\n"
+                    f"     {self.game_folder}, restart Steam, and reinstall the game"
                 )
                 return DiagnosticResult(
                     name="Steam Running as Administrator",
@@ -1039,8 +1040,9 @@ class BaseChecker:
                     f'takeown /F "{appdata_path}" /R /D Y\n'
                     f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
                     "5. If issues persist:\n"
-                    "   • Reinstall Steam (not uninstall, just run installer again)\n"
-                    "   • OR: Uninstall the game, manually delete the Game folder, reinstall"
+                    "   • Reinstall Steam (download installer from steampowered.com and run)\n"
+                    "   • OR: In Steam, uninstall game, then manually delete entire folder at\n"
+                    f"     {self.game_folder}, restart Steam, and reinstall the game"
                 )
                 return DiagnosticResult(
                     name="Steam Elevation Check",
