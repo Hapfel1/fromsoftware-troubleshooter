@@ -1149,7 +1149,7 @@ class EldenRingChecker(BaseChecker):
     EXE_NAME = "eldenring.exe"
     SAVE_FILE_NAME = "ER0000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST"]
+    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1158,6 +1158,25 @@ class EldenRingChecker(BaseChecker):
         "steam_emu.ini",
         "winmm.dll",
         "dinput8.dll",
+        "Language Selector.exe",
+        "Origins.ini",
+        "StubDRM64.dll",
+        "steam_api64.cdx",
+        "codex64.dll",
+        "Gold-Team.Org.txt",
+        "Crack.rar",
+        "Www.Gold-Team.Org.html",
+        "SteamFix.ini",
+        "SteamFix64.dll",
+        "FreeTP.Org.html",
+        "DSfix.ini",
+        "DSfixKeys.ini",
+        "unins000.exe",
+        "unins000.dat",
+        "cream_api.ini",
+        "cream_api64.dll",
+        "steam_api64_o.dll",
+        "eldenring.cdx",
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
@@ -1173,7 +1192,7 @@ class NightReignChecker(BaseChecker):
     EXE_NAME = "nightreign.exe"
     SAVE_FILE_NAME = "NR0000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide"]
+    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1182,6 +1201,25 @@ class NightReignChecker(BaseChecker):
         "steam_emu.ini",
         "winmm.dll",
         "dinput8.dll",
+        "Language Selector.exe",
+        "Origins.ini",
+        "StubDRM64.dll",
+        "steam_api64.cdx",
+        "codex64.dll",
+        "Gold-Team.Org.txt",
+        "Crack.rar",
+        "Www.Gold-Team.Org.html",
+        "SteamFix.ini",
+        "SteamFix64.dll",
+        "FreeTP.Org.html",
+        "DSfix.ini",
+        "DSfixKeys.ini",
+        "unins000.exe",
+        "unins000.dat",
+        "cream_api.ini",
+        "cream_api64.dll",
+        "steam_api64_o.dll",
+        "nightreign.cdx",
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
@@ -1197,7 +1235,7 @@ class DarkSouls1Checker(BaseChecker):
     EXE_NAME = "DarkSoulsRemastered.exe"
     SAVE_FILE_NAME = "DRAKS0005.sl2"
     GAME_SUBFOLDER = ""  # flat - files sit directly in install root
-    PIRACY_FOLDERS = ["_CommonRedist"]
+    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1205,6 +1243,26 @@ class DarkSouls1Checker(BaseChecker):
         "steam_api64.rne",
         "steam_emu.ini",
         "winmm.dll",
+        "dinput8.dll",
+        "Language Selector.exe",
+        "Origins.ini",
+        "StubDRM64.dll",
+        "steam_api64.cdx",
+        "codex64.dll",
+        "Gold-Team.Org.txt",
+        "Crack.rar",
+        "Www.Gold-Team.Org.html",
+        "SteamFix.ini",
+        "SteamFix64.dll",
+        "FreeTP.Org.html",
+        "DSfix.ini",
+        "DSfixKeys.ini",
+        "unins000.exe",
+        "unins000.dat",
+        "cream_api.ini",
+        "cream_api64.dll",
+        "steam_api64_o.dll",
+        "DarkSoulsRemastered.cdx",
     ]
 
 
@@ -1214,7 +1272,7 @@ class DarkSouls2Checker(BaseChecker):
     EXE_NAME = "DarkSoulsII.exe"
     SAVE_FILE_NAME = "DS2SOFS0000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist"]
+    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1222,6 +1280,26 @@ class DarkSouls2Checker(BaseChecker):
         "steam_api64.rne",
         "steam_emu.ini",
         "winmm.dll",
+        "dinput8.dll",
+        "Language Selector.exe",
+        "Origins.ini",
+        "StubDRM64.dll",
+        "steam_api64.cdx",
+        "codex64.dll",
+        "Gold-Team.Org.txt",
+        "Crack.rar",
+        "Www.Gold-Team.Org.html",
+        "SteamFix.ini",
+        "SteamFix64.dll",
+        "FreeTP.Org.html",
+        "DSfix.ini",
+        "DSfixKeys.ini",
+        "unins000.exe",
+        "unins000.dat",
+        "cream_api.ini",
+        "cream_api64.dll",
+        "steam_api64_o.dll",
+        "DarkSoulsII.cdx",
     ]
 
 
@@ -1231,7 +1309,7 @@ class DarkSouls3Checker(BaseChecker):
     EXE_NAME = "DarkSoulsIII.exe"
     SAVE_FILE_NAME = "DS30000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist"]
+    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1240,6 +1318,25 @@ class DarkSouls3Checker(BaseChecker):
         "steam_emu.ini",
         "winmm.dll",
         "dinput8.dll",
+        "Language Selector.exe",
+        "Origins.ini",
+        "StubDRM64.dll",
+        "steam_api64.cdx",
+        "codex64.dll",
+        "Gold-Team.Org.txt",
+        "Crack.rar",
+        "Www.Gold-Team.Org.html",
+        "SteamFix.ini",
+        "SteamFix64.dll",
+        "FreeTP.Org.html",
+        "DSfix.ini",
+        "DSfixKeys.ini",
+        "unins000.exe",
+        "unins000.dat",
+        "cream_api.ini",
+        "cream_api64.dll",
+        "steam_api64_o.dll",
+        "DarkSoulsIII.cdx",
     ]
 
 
@@ -1249,7 +1346,7 @@ class SekiroChecker(BaseChecker):
     EXE_NAME = "sekiro.exe"
     SAVE_FILE_NAME = "S0000.sl2"
     GAME_SUBFOLDER = ""  # flat - files sit directly in install root
-    PIRACY_FOLDERS = ["_CommonRedist"]
+    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1257,6 +1354,26 @@ class SekiroChecker(BaseChecker):
         "steam_api64.rne",
         "steam_emu.ini",
         "winmm.dll",
+        "dinput8.dll",
+        "Language Selector.exe",
+        "Origins.ini",
+        "StubDRM64.dll",
+        "steam_api64.cdx",
+        "codex64.dll",
+        "Gold-Team.Org.txt",
+        "Crack.rar",
+        "Www.Gold-Team.Org.html",
+        "SteamFix.ini",
+        "SteamFix64.dll",
+        "FreeTP.Org.html",
+        "DSfix.ini",
+        "DSfixKeys.ini",
+        "unins000.exe",
+        "unins000.dat",
+        "cream_api.ini",
+        "cream_api64.dll",
+        "steam_api64_o.dll",
+        "sekiro.cdx",
     ]
 
 
@@ -1266,7 +1383,7 @@ class ArmoredCore6Checker(BaseChecker):
     EXE_NAME = "armoredcore6.exe"
     SAVE_FILE_NAME = "AC60000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist"]
+    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1275,6 +1392,25 @@ class ArmoredCore6Checker(BaseChecker):
         "steam_emu.ini",
         "winmm.dll",
         "dinput8.dll",
+        "Language Selector.exe",
+        "Origins.ini",
+        "StubDRM64.dll",
+        "steam_api64.cdx",
+        "codex64.dll",
+        "Gold-Team.Org.txt",
+        "Crack.rar",
+        "Www.Gold-Team.Org.html",
+        "SteamFix.ini",
+        "SteamFix64.dll",
+        "FreeTP.Org.html",
+        "DSfix.ini",
+        "DSfixKeys.ini",
+        "unins000.exe",
+        "unins000.dat",
+        "cream_api.ini",
+        "cream_api64.dll",
+        "steam_api64_o.dll",
+        "armoredcore6.cdx",
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
