@@ -151,6 +151,161 @@ def _ask_yes_no(parent: ctk.CTk, title: str, message: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Permission fix dialog
+# ---------------------------------------------------------------------------
+
+
+def _show_permission_fix(
+    parent: ctk.CTk, game_folder: Path | None, game_exe: str
+) -> None:
+    import os
+
+    dialog = ctk.CTkToplevel(parent)
+    dialog.title("Fix Steam Permissions")
+    dialog.resizable(False, False)
+    dialog.configure(fg_color=COLORS["bg"])
+    dialog.lift()
+    dialog.attributes("-topmost", True)
+
+    w, h = 650, 520
+    parent.update_idletasks()
+    px = parent.winfo_rootx() + (parent.winfo_width() // 2) - (w // 2)
+    py = parent.winfo_rooty() + (parent.winfo_height() // 2) - (h // 2)
+    dialog.geometry(f"{w}x{h}+{px}+{py}")
+    dialog.after(50, dialog.grab_set)
+
+    inner = ctk.CTkScrollableFrame(
+        dialog, fg_color=COLORS["bg"], scrollbar_button_color=COLORS["surface"]
+    )
+    inner.pack(fill="both", expand=True, padx=20, pady=20)
+
+    appdata_path = (
+        Path(os.environ.get("APPDATA", "")) if os.name == "nt" else Path.home()
+    )
+    username = (
+        os.environ.get("USERNAME", "YourUsername")
+        if os.name == "nt"
+        else os.environ.get("USER", "youruser")
+    )
+
+    ctk.CTkLabel(
+        inner,
+        text="Fix Steam/Game Permission Issues",
+        font=("Segoe UI", 16, "bold"),
+        text_color=COLORS["fg"],
+    ).pack(anchor="w", pady=(0, 10))
+
+    ctk.CTkLabel(
+        inner,
+        text="Follow these steps if you're getting error 740 or permission errors:",
+        font=("Segoe UI", 11),
+        text_color=COLORS["fg_muted"],
+    ).pack(anchor="w", pady=(0, 15))
+
+    steps = [
+        "1. Exit Steam completely",
+        "2. Right-click steam.exe > Properties > Compatibility tab",
+        "   → Uncheck 'Run this program as an administrator'",
+        f"3. Right-click {game_exe} in game folder > Properties > Compatibility tab",
+        "   → Uncheck 'Run this program as an administrator'",
+        "4. Take Ownership (PowerShell as Admin):",
+    ]
+
+    for step in steps:
+        ctk.CTkLabel(
+            inner,
+            text=step,
+            font=("Segoe UI", 11),
+            text_color=COLORS["fg"],
+            anchor="w",
+        ).pack(anchor="w", pady=2)
+
+    if game_folder:
+        cmd1 = ctk.CTkTextbox(
+            inner,
+            height=28,
+            font=("Consolas", 10),
+            wrap="none",
+            fg_color=COLORS["surface"],
+            text_color=COLORS["fg"],
+        )
+        cmd1.pack(fill="x", pady=(8, 2))
+        cmd1.insert("1.0", f'takeown /F "{game_folder}" /R /D Y')
+        cmd1.configure(state="disabled")
+
+        cmd2 = ctk.CTkTextbox(
+            inner,
+            height=28,
+            font=("Consolas", 10),
+            wrap="none",
+            fg_color=COLORS["surface"],
+            text_color=COLORS["fg"],
+        )
+        cmd2.pack(fill="x", pady=2)
+        cmd2.insert("1.0", f'icacls "{game_folder}" /grant {username}:F /T')
+        cmd2.configure(state="disabled")
+
+        if os.name == "nt":
+            cmd3 = ctk.CTkTextbox(
+                inner,
+                height=28,
+                font=("Consolas", 10),
+                wrap="none",
+                fg_color=COLORS["surface"],
+                text_color=COLORS["fg"],
+            )
+            cmd3.pack(fill="x", pady=(8, 2))
+            cmd3.insert("1.0", f'takeown /F "{appdata_path}" /R /D Y')
+            cmd3.configure(state="disabled")
+
+            cmd4 = ctk.CTkTextbox(
+                inner,
+                height=28,
+                font=("Consolas", 10),
+                wrap="none",
+                fg_color=COLORS["surface"],
+                text_color=COLORS["fg"],
+            )
+            cmd4.pack(fill="x", pady=2)
+            cmd4.insert("1.0", f'icacls "{appdata_path}" /grant {username}:F /T')
+            cmd4.configure(state="disabled")
+
+    ctk.CTkLabel(
+        inner,
+        text="5. If issues persist:",
+        font=("Segoe UI", 11),
+        text_color=COLORS["fg"],
+        anchor="w",
+    ).pack(anchor="w", pady=(15, 2))
+
+    ctk.CTkLabel(
+        inner,
+        text="   • Reinstall Steam (not uninstall, just run installer again)",
+        font=("Segoe UI", 11),
+        text_color=COLORS["fg_muted"],
+        anchor="w",
+    ).pack(anchor="w", pady=2)
+
+    ctk.CTkLabel(
+        inner,
+        text="   • OR: Uninstall game, manually delete game folder, reinstall",
+        font=("Segoe UI", 11),
+        text_color=COLORS["fg_muted"],
+        anchor="w",
+    ).pack(anchor="w", pady=2)
+
+    ctk.CTkButton(
+        dialog,
+        text="Close",
+        width=100,
+        command=dialog.destroy,
+        fg_color=COLORS["surface"],
+        hover_color=COLORS["surface_alt"],
+        text_color=COLORS["fg"],
+    ).pack(pady=(0, 20))
+
+
+# ---------------------------------------------------------------------------
 # Main app
 # ---------------------------------------------------------------------------
 
@@ -255,6 +410,16 @@ class TroubleshooterApp:
             folder_row,
             text="Set Game Folder",
             command=self._pick_game_folder,
+            width=140,
+            fg_color=COLORS["surface"],
+            hover_color=COLORS["accent"],
+            text_color=COLORS["fg"],
+        ).pack(side="left", padx=(0, 10))
+
+        ctk.CTkButton(
+            folder_row,
+            text="Fix Permissions",
+            command=self._show_perm_fix,
             width=140,
             fg_color=COLORS["surface"],
             hover_color=COLORS["accent"],
@@ -372,6 +537,11 @@ class TroubleshooterApp:
                 text=str(self._game_folder), text_color=COLORS["fg"]
             )
             self._run_checks()
+
+    def _show_perm_fix(self) -> None:
+        checker_cls = GAME_OPTIONS.get(self._game_var.get(), EldenRingChecker)
+        game_exe = checker_cls.EXE_NAME
+        _show_permission_fix(self.root, self._game_folder, game_exe)
 
     # -------------------------------------------------------------------------
 

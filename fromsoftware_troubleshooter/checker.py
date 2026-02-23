@@ -1,4 +1,4 @@
-"""Standalone checker — no er_save_manager dependency."""
+"""Standalone checker"""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def _load_manifest() -> dict:
         Path.cwd() / "game_file_sizes.json",  # working directory
     ]
     for candidate in candidates:
-        _dbg(f"manifest: checking {candidate} — exists={candidate.exists()}")
+        _dbg(f"manifest: checking {candidate} - exists={candidate.exists()}")
         if candidate.exists():
             try:
                 _MANIFEST_CACHE = json.loads(candidate.read_text())
@@ -133,7 +133,7 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
         return DiagnosticResult(
             name="Game Version Check",
             status="info",
-            message="No reference build ID recorded — size checks may not reflect the latest patch",
+            message="No reference build ID recorded - size checks may not reflect the latest patch",
         )
 
     current = _read_local_build_id(app_id)
@@ -142,7 +142,7 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
         return DiagnosticResult(
             name="Game Version Check",
             status="info",
-            message="Game not found in Steam libraries — cannot verify build ID",
+            message="Game not found in Steam libraries - cannot verify build ID",
         )
 
     if current != stored:
@@ -448,7 +448,7 @@ def autoscan(manifest_key: str) -> tuple[Path | None, Path | None]:
 # Process lists
 # ---------------------------------------------------------------------------
 
-# High confidence — known to cause crashes or EAC issues
+# High confidence - known to cause crashes or issues
 PROBLEMATIC_PROCESSES = [
     # Windows
     "vgtray.exe",
@@ -458,7 +458,7 @@ PROBLEMATIC_PROCESSES = [
     "MSIAfterburner.exe",
     "SignalRgb.exe",
     "ProcessLasso.exe",
-    # Problematic antiviruses (known to cause crashes or performance issues)
+    # Problematic antiviruses (known to cause crashes, false bans, or performance issues)
     "avira.exe",
     "avgui.exe",
     "AviraOptimizerHost.exe",
@@ -469,7 +469,6 @@ PROBLEMATIC_PROCESSES = [
     "AvastUI.exe",
     "AvastSvc.exe",
     "avgnt.exe",
-    "avgui.exe",
     "AVGSvc.exe",
     "mcshield.exe",
     "mcuicnt.exe",  # McAfee
@@ -478,7 +477,7 @@ PROBLEMATIC_PROCESSES = [
     "TrusteerEndpointProtection.exe",  # Trusteer Rapport
 ]
 
-# Low confidence — unlikely to cause issues but worth knowing
+# Low confidence - unlikely to cause issues but worth knowing
 INFORMATIONAL_PROCESSES = [
     # Windows
     "Discord.exe",
@@ -630,7 +629,7 @@ class BaseChecker:
             return DiagnosticResult(
                 name="Game Executable",
                 status="ok",
-                message=f"{self.EXE_NAME} found — {_format_size(actual_size)}",
+                message=f"{self.EXE_NAME} found - {_format_size(actual_size)}",
             )
         elif size_status == "warning":
             expected = _format_size(entry["exact"]) if entry else "unknown"
@@ -648,7 +647,7 @@ class BaseChecker:
         return DiagnosticResult(
             name="Game Executable",
             status="info",
-            message=f"{self.EXE_NAME} found — {_format_size(actual_size)} (no reference size available)",
+            message=f"{self.EXE_NAME} found - {_format_size(actual_size)} (no reference size available)",
         )
 
     def _check_piracy_indicators(self) -> list[DiagnosticResult]:
@@ -751,7 +750,7 @@ class BaseChecker:
             return DiagnosticResult(
                 name="Regulation File",
                 status="ok",
-                message=f"regulation.bin is valid — {_format_size(actual_size)}",
+                message=f"regulation.bin is valid - {_format_size(actual_size)}",
             )
         elif size_status == "warning":
             expected = _format_size(entry["exact"]) if entry else "unknown"
@@ -769,7 +768,7 @@ class BaseChecker:
         return DiagnosticResult(
             name="Regulation File",
             status="info",
-            message=f"regulation.bin found — {_format_size(actual_size)} (no reference size available)",
+            message=f"regulation.bin found - {_format_size(actual_size)} (no reference size available)",
         )
 
     def _check_problematic_processes(self) -> list[DiagnosticResult]:
@@ -898,7 +897,7 @@ class BaseChecker:
                 DiagnosticResult(
                     name="VPN Detected",
                     status="warning",
-                    message="Active VPN client(s) detected — may cause multiplayer issues:",
+                    message="Active VPN client(s) detected - may cause multiplayer issues:",
                     bullet_items=running_vpns,
                     fix_available=True,
                     fix_action="Disable or exit your VPN before playing online.",
@@ -999,15 +998,22 @@ class BaseChecker:
                         message="Steam is not running (elevation check skipped)",
                     )
                 appdata_path = Path(os.environ.get("APPDATA", "")) / self.GAME_NAME
+                username = os.environ.get("USERNAME", "YourUsername")
                 fix_message = (
                     "Steam is running with administrator privileges.\n\n"
-                    "1. Exit Steam, right-click steam.exe > Properties > Compatibility\n"
-                    "   Uncheck 'Run this program as an administrator'\n\n"
-                    "2. Take Ownership (PowerShell as Admin):\n\n"
+                    "1. Exit Steam completely\n\n"
+                    "2. Right-click steam.exe > Properties > Compatibility tab\n"
+                    "   → Uncheck 'Run this program as an administrator'\n\n"
+                    f"3. Right-click {self.EXE_NAME} in game folder > Properties > Compatibility tab\n"
+                    "   → Uncheck 'Run this program as an administrator'\n\n"
+                    "4. Take Ownership (PowerShell as Admin):\n\n"
                     f'takeown /F "{self.game_folder}" /R /D Y\n'
-                    f'icacls "{self.game_folder}" /grant %USERNAME%:F /T\n\n'
+                    f'icacls "{self.game_folder}" /grant {username}:F /T\n\n'
                     f'takeown /F "{appdata_path}" /R /D Y\n'
-                    f'icacls "{appdata_path}" /grant %USERNAME%:F /T'
+                    f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
+                    "5. If issues persist:\n"
+                    "   • Reinstall Steam (not uninstall, just run installer again)\n"
+                    "   • OR: Uninstall game, manually delete game folder, reinstall"
                 )
                 return DiagnosticResult(
                     name="Steam Running as Administrator",
@@ -1017,10 +1023,31 @@ class BaseChecker:
                     fix_action=fix_message,
                 )
             elif output == "normal":
+                # Add info result with permission fix for users who previously ran as admin
+                appdata_path = Path(os.environ.get("APPDATA", "")) / self.GAME_NAME
+                username = os.environ.get("USERNAME", "YourUsername")
+                perm_fix = (
+                    "If you previously ran Steam as administrator or are getting error 740, follow these steps:\n\n"
+                    "1. Exit Steam completely\n\n"
+                    "2. Right-click steam.exe > Properties > Compatibility tab\n"
+                    "   → Uncheck 'Run this program as an administrator'\n\n"
+                    f"3. Right-click {self.EXE_NAME} in game folder > Properties > Compatibility tab\n"
+                    "   → Uncheck 'Run this program as an administrator'\n\n"
+                    "4. Take Ownership (PowerShell as Admin):\n\n"
+                    f'takeown /F "{self.game_folder}" /R /D Y\n'
+                    f'icacls "{self.game_folder}" /grant {username}:F /T\n\n'
+                    f'takeown /F "{appdata_path}" /R /D Y\n'
+                    f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
+                    "5. If issues persist:\n"
+                    "   • Reinstall Steam (not uninstall, just run installer again)\n"
+                    "   • OR: Uninstall game, manually delete game folder, reinstall"
+                )
                 return DiagnosticResult(
                     name="Steam Elevation Check",
                     status="ok",
                     message="Steam is running with normal privileges",
+                    fix_available=True,
+                    fix_action=perm_fix,
                 )
             return DiagnosticResult(
                 name="Steam Elevation Check",
@@ -1057,7 +1084,7 @@ class BaseChecker:
                 DiagnosticResult(
                     name="Save File Permissions",
                     status="error",
-                    message="Cannot read save file — check file permissions",
+                    message="Cannot read save file - check file permissions",
                     fix_available=True,
                     fix_action="Run as administrator or check file permissions",
                 )
@@ -1076,7 +1103,7 @@ class BaseChecker:
                 DiagnosticResult(
                     name="Save File Size",
                     status="error",
-                    message=f"Save file suspiciously small ({file_size:,} bytes) — may be corrupted",
+                    message=f"Save file suspiciously small ({file_size:,} bytes) - may be corrupted",
                 )
             )
         else:
@@ -1167,7 +1194,7 @@ class DarkSouls1Checker(BaseChecker):
     MANIFEST_KEY = "dark_souls_remastered"
     EXE_NAME = "DarkSoulsRemastered.exe"
     SAVE_FILE_NAME = "DRAKS0005.sl2"
-    GAME_SUBFOLDER = ""  # flat — files sit directly in install root
+    GAME_SUBFOLDER = ""  # flat - files sit directly in install root
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
@@ -1219,7 +1246,7 @@ class SekiroChecker(BaseChecker):
     MANIFEST_KEY = "sekiro"
     EXE_NAME = "sekiro.exe"
     SAVE_FILE_NAME = "S0000.sl2"
-    GAME_SUBFOLDER = ""  # flat — files sit directly in install root
+    GAME_SUBFOLDER = ""  # flat - files sit directly in install root
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
