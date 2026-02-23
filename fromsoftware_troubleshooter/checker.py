@@ -1013,7 +1013,7 @@ class BaseChecker:
                     f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
                     "5. If issues persist:\n"
                     "   • Reinstall Steam (download installer from steampowered.com and run)\n"
-                    "   • OR: In Steam, uninstall game, then manually delete entire folder at\n"
+                    "   • OR: In Steam, uninstall the game, then manually delete the entire Game folder at\n"
                     f"     {self.game_folder}, restart Steam, and reinstall the game"
                 )
                 return DiagnosticResult(
@@ -1041,7 +1041,7 @@ class BaseChecker:
                     f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
                     "5. If issues persist:\n"
                     "   • Reinstall Steam (download installer from steampowered.com and run)\n"
-                    "   • OR: In Steam, uninstall game, then manually delete entire folder at\n"
+                    "   • OR: In Steam, uninstall the game, then manually delete the entire Game folder at\n"
                     f"     {self.game_folder}, restart Steam, and reinstall the game"
                 )
                 return DiagnosticResult(

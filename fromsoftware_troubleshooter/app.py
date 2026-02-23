@@ -280,19 +280,46 @@ def _show_permission_fix(
 
     ctk.CTkLabel(
         inner,
-        text="   • Reinstall Steam (not uninstall, just run installer again)",
+        text="   • Reinstall Steam (download the installer from steampowered.com and run)",
         font=("Segoe UI", 11),
         text_color=COLORS["fg_muted"],
         anchor="w",
     ).pack(anchor="w", pady=2)
 
-    ctk.CTkLabel(
-        inner,
-        text="   • OR: Uninstall game, manually delete game folder, reinstall",
-        font=("Segoe UI", 11),
-        text_color=COLORS["fg_muted"],
-        anchor="w",
-    ).pack(anchor="w", pady=2)
+    if game_folder:
+        reinstall_text = "   • OR: In Steam, uninstall the game, then manually delete the entire Game folder at:"
+        ctk.CTkLabel(
+            inner,
+            text=reinstall_text,
+            font=("Segoe UI", 11),
+            text_color=COLORS["fg_muted"],
+            anchor="w",
+        ).pack(anchor="w", pady=2)
+
+        ctk.CTkLabel(
+            inner,
+            text=f"     {game_folder}",
+            font=("Segoe UI", 11),
+            text_color=COLORS["fg_muted"],
+            anchor="w",
+            wraplength=600,
+        ).pack(anchor="w", pady=(0, 2))
+
+        ctk.CTkLabel(
+            inner,
+            text="     Then restart Steam and reinstall the game",
+            font=("Segoe UI", 11),
+            text_color=COLORS["fg_muted"],
+            anchor="w",
+        ).pack(anchor="w", pady=(0, 2))
+    else:
+        ctk.CTkLabel(
+            inner,
+            text="   • OR: In Steam, uninstall the game, manually delete the game folder, reinstall",
+            font=("Segoe UI", 11),
+            text_color=COLORS["fg_muted"],
+            anchor="w",
+        ).pack(anchor="w", pady=2)
 
     ctk.CTkButton(
         dialog,
@@ -785,7 +812,7 @@ class TroubleshooterApp:
             return
 
         lines = [
-            f"FromSoftware Troubleshooter - {self._game_var.get()}",
+            f"FromSoftware Troubleshooter — {self._game_var.get()}",
             "=" * 60,
             "",
         ]
