@@ -1013,7 +1013,7 @@ class BaseChecker:
                     f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
                     "5. If issues persist:\n"
                     "   • Reinstall Steam (not uninstall, just run installer again)\n"
-                    "   • OR: Uninstall game, manually delete game folder, reinstall"
+                    "   • OR: Uninstall the game, manually delete the Game folder, reinstall"
                 )
                 return DiagnosticResult(
                     name="Steam Running as Administrator",
@@ -1040,7 +1040,7 @@ class BaseChecker:
                     f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
                     "5. If issues persist:\n"
                     "   • Reinstall Steam (not uninstall, just run installer again)\n"
-                    "   • OR: Uninstall game, manually delete game folder, reinstall"
+                    "   • OR: Uninstall the game, manually delete the Game folder, reinstall"
                 )
                 return DiagnosticResult(
                     name="Steam Elevation Check",

@@ -14,10 +14,10 @@ import pyperclip
 from fromsoftware_troubleshooter.checker import (
     ArmoredCore6Checker,
     BaseChecker,
-    DiagnosticResult,
     DarkSouls1Checker,
     DarkSouls2Checker,
     DarkSouls3Checker,
+    DiagnosticResult,
     EldenRingChecker,
     NightReignChecker,
     SekiroChecker,
@@ -29,47 +29,47 @@ from fromsoftware_troubleshooter.checker import (
 # Catppuccin Mocha palette
 # ---------------------------------------------------------------------------
 COLORS = {
-    "bg":           "#1e1e2e",
-    "bg_alt":       "#181825",
-    "surface":      "#313244",
-    "surface_alt":  "#45475a",
-    "fg":           "#cdd6f4",
-    "fg_muted":     "#a6adc8",
-    "accent":       "#cba6f7",  # Mauve
+    "bg": "#1e1e2e",
+    "bg_alt": "#181825",
+    "surface": "#313244",
+    "surface_alt": "#45475a",
+    "fg": "#cdd6f4",
+    "fg_muted": "#a6adc8",
+    "accent": "#cba6f7",  # Mauve
     "accent_hover": "#b490e3",
-    "green":        "#a6e3a1",
-    "yellow":       "#f9e2af",
-    "red":          "#f38ba8",
-    "blue":         "#89b4fa",
+    "green": "#a6e3a1",
+    "yellow": "#f9e2af",
+    "red": "#f38ba8",
+    "blue": "#89b4fa",
 }
 
 STATUS_COLORS = {
-    "ok":      COLORS["green"],
+    "ok": COLORS["green"],
     "warning": COLORS["yellow"],
-    "error":   COLORS["red"],
-    "info":    COLORS["blue"],
+    "error": COLORS["red"],
+    "info": COLORS["blue"],
 }
 
 STATUS_ICONS = {"ok": "OK", "warning": "!", "error": "X", "info": "i"}
 
 GAME_OPTIONS: dict[str, type] = {
-    "Elden Ring":                              EldenRingChecker,
-    "Elden Ring Nightreign":                   NightReignChecker,
-    "Dark Souls Remastered":                   DarkSouls1Checker,
+    "Elden Ring": EldenRingChecker,
+    "Elden Ring Nightreign": NightReignChecker,
+    "Dark Souls Remastered": DarkSouls1Checker,
     "Dark Souls II: Scholar of the First Sin": DarkSouls2Checker,
-    "Dark Souls III":                          DarkSouls3Checker,
-    "Sekiro: Shadows Die Twice":               SekiroChecker,
-    "Armored Core VI: Fires of Rubicon":       ArmoredCore6Checker,
+    "Dark Souls III": DarkSouls3Checker,
+    "Sekiro: Shadows Die Twice": SekiroChecker,
+    "Armored Core VI: Fires of Rubicon": ArmoredCore6Checker,
 }
 
 GAME_MANIFEST_KEYS: dict[str, str] = {
-    "Elden Ring":                              "elden_ring",
-    "Elden Ring Nightreign":                   "nightreign",
-    "Dark Souls Remastered":                   "dark_souls_remastered",
+    "Elden Ring": "elden_ring",
+    "Elden Ring Nightreign": "nightreign",
+    "Dark Souls Remastered": "dark_souls_remastered",
     "Dark Souls II: Scholar of the First Sin": "dark_souls_2",
-    "Dark Souls III":                          "dark_souls_3",
-    "Sekiro: Shadows Die Twice":               "sekiro",
-    "Armored Core VI: Fires of Rubicon":       "armored_core_6",
+    "Dark Souls III": "dark_souls_3",
+    "Sekiro: Shadows Die Twice": "sekiro",
+    "Armored Core VI: Fires of Rubicon": "armored_core_6",
 }
 
 _SENTINEL = object()
@@ -78,6 +78,7 @@ _SENTINEL = object()
 # ---------------------------------------------------------------------------
 # Themed yes/no dialog (replaces tkinter.messagebox)
 # ---------------------------------------------------------------------------
+
 
 def _ask_yes_no(parent: ctk.CTk, title: str, message: str) -> bool:
     result: dict[str, bool] = {}
@@ -120,16 +121,28 @@ def _ask_yes_no(parent: ctk.CTk, title: str, message: str) -> bool:
         dialog.destroy()
 
     ctk.CTkButton(
-        btn_row, text="Yes", width=90, height=30, command=_yes,
-        fg_color=COLORS["accent"], hover_color=COLORS["accent_hover"],
-        text_color="#1e1e2e", font=("Segoe UI", 12, "bold"),
+        btn_row,
+        text="Yes",
+        width=90,
+        height=30,
+        command=_yes,
+        fg_color=COLORS["accent"],
+        hover_color=COLORS["accent_hover"],
+        text_color="#1e1e2e",
+        font=("Segoe UI", 12, "bold"),
         corner_radius=6,
     ).pack(side="left", padx=(0, 8))
 
     ctk.CTkButton(
-        btn_row, text="No", width=90, height=30, command=_no,
-        fg_color=COLORS["surface"], hover_color=COLORS["surface_alt"],
-        text_color=COLORS["fg"], font=("Segoe UI", 12),
+        btn_row,
+        text="No",
+        width=90,
+        height=30,
+        command=_no,
+        fg_color=COLORS["surface"],
+        hover_color=COLORS["surface_alt"],
+        text_color=COLORS["fg"],
+        font=("Segoe UI", 12),
         corner_radius=6,
     ).pack(side="left")
 
@@ -142,9 +155,11 @@ def _ask_yes_no(parent: ctk.CTk, title: str, message: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _show_permission_fix(parent: ctk.CTk, game_folder: Path | None, game_exe: str) -> None:
+def _show_permission_fix(
+    parent: ctk.CTk, game_folder: Path | None, game_exe: str
+) -> None:
     import os
-    
+
     dialog = ctk.CTkToplevel(parent)
     dialog.title("Fix Steam Permissions")
     dialog.resizable(False, False)
@@ -164,17 +179,27 @@ def _show_permission_fix(parent: ctk.CTk, game_folder: Path | None, game_exe: st
     )
     inner.pack(fill="both", expand=True, padx=20, pady=20)
 
-    appdata_path = Path(os.environ.get("APPDATA", "")) if os.name == "nt" else Path.home()
-    username = os.environ.get("USERNAME", "YourUsername") if os.name == "nt" else os.environ.get("USER", "youruser")
+    appdata_path = (
+        Path(os.environ.get("APPDATA", "")) if os.name == "nt" else Path.home()
+    )
+    username = (
+        os.environ.get("USERNAME", "YourUsername")
+        if os.name == "nt"
+        else os.environ.get("USER", "youruser")
+    )
 
     ctk.CTkLabel(
-        inner, text="Fix Steam/Game Permission Issues",
-        font=("Segoe UI", 16, "bold"), text_color=COLORS["fg"],
+        inner,
+        text="Fix Steam/Game Permission Issues",
+        font=("Segoe UI", 16, "bold"),
+        text_color=COLORS["fg"],
     ).pack(anchor="w", pady=(0, 10))
 
     ctk.CTkLabel(
-        inner, text="Follow these steps if you're getting error 740 or permission errors:",
-        font=("Segoe UI", 11), text_color=COLORS["fg_muted"],
+        inner,
+        text="Follow these steps if you're getting error 740 or permission errors:",
+        font=("Segoe UI", 11),
+        text_color=COLORS["fg_muted"],
     ).pack(anchor="w", pady=(0, 15))
 
     steps = [
@@ -188,22 +213,33 @@ def _show_permission_fix(parent: ctk.CTk, game_folder: Path | None, game_exe: st
 
     for step in steps:
         ctk.CTkLabel(
-            inner, text=step, font=("Segoe UI", 11),
-            text_color=COLORS["fg"], anchor="w",
+            inner,
+            text=step,
+            font=("Segoe UI", 11),
+            text_color=COLORS["fg"],
+            anchor="w",
         ).pack(anchor="w", pady=2)
 
     if game_folder:
         cmd1 = ctk.CTkTextbox(
-            inner, height=28, font=("Consolas", 10), wrap="none",
-            fg_color=COLORS["surface"], text_color=COLORS["fg"],
+            inner,
+            height=28,
+            font=("Consolas", 10),
+            wrap="none",
+            fg_color=COLORS["surface"],
+            text_color=COLORS["fg"],
         )
         cmd1.pack(fill="x", pady=(8, 2))
         cmd1.insert("1.0", f'takeown /F "{game_folder}" /R /D Y')
         cmd1.configure(state="disabled")
 
         cmd2 = ctk.CTkTextbox(
-            inner, height=28, font=("Consolas", 10), wrap="none",
-            fg_color=COLORS["surface"], text_color=COLORS["fg"],
+            inner,
+            height=28,
+            font=("Consolas", 10),
+            wrap="none",
+            fg_color=COLORS["surface"],
+            text_color=COLORS["fg"],
         )
         cmd2.pack(fill="x", pady=2)
         cmd2.insert("1.0", f'icacls "{game_folder}" /grant {username}:F /T')
@@ -211,39 +247,60 @@ def _show_permission_fix(parent: ctk.CTk, game_folder: Path | None, game_exe: st
 
         if os.name == "nt":
             cmd3 = ctk.CTkTextbox(
-                inner, height=28, font=("Consolas", 10), wrap="none",
-                fg_color=COLORS["surface"], text_color=COLORS["fg"],
+                inner,
+                height=28,
+                font=("Consolas", 10),
+                wrap="none",
+                fg_color=COLORS["surface"],
+                text_color=COLORS["fg"],
             )
             cmd3.pack(fill="x", pady=(8, 2))
             cmd3.insert("1.0", f'takeown /F "{appdata_path}" /R /D Y')
             cmd3.configure(state="disabled")
 
             cmd4 = ctk.CTkTextbox(
-                inner, height=28, font=("Consolas", 10), wrap="none",
-                fg_color=COLORS["surface"], text_color=COLORS["fg"],
+                inner,
+                height=28,
+                font=("Consolas", 10),
+                wrap="none",
+                fg_color=COLORS["surface"],
+                text_color=COLORS["fg"],
             )
             cmd4.pack(fill="x", pady=2)
             cmd4.insert("1.0", f'icacls "{appdata_path}" /grant {username}:F /T')
             cmd4.configure(state="disabled")
 
     ctk.CTkLabel(
-        inner, text="5. If issues persist:", font=("Segoe UI", 11),
-        text_color=COLORS["fg"], anchor="w",
+        inner,
+        text="5. If issues persist:",
+        font=("Segoe UI", 11),
+        text_color=COLORS["fg"],
+        anchor="w",
     ).pack(anchor="w", pady=(15, 2))
 
     ctk.CTkLabel(
-        inner, text="   • Reinstall Steam (not uninstall, just run installer again)",
-        font=("Segoe UI", 11), text_color=COLORS["fg_muted"], anchor="w",
+        inner,
+        text="   • Reinstall Steam (not uninstall, just run installer again)",
+        font=("Segoe UI", 11),
+        text_color=COLORS["fg_muted"],
+        anchor="w",
     ).pack(anchor="w", pady=2)
 
     ctk.CTkLabel(
-        inner, text="   • OR: Uninstall game, manually delete game folder, reinstall",
-        font=("Segoe UI", 11), text_color=COLORS["fg_muted"], anchor="w",
+        inner,
+        text="   • OR: Uninstall game, manually delete game folder, reinstall",
+        font=("Segoe UI", 11),
+        text_color=COLORS["fg_muted"],
+        anchor="w",
     ).pack(anchor="w", pady=2)
 
     ctk.CTkButton(
-        dialog, text="Close", width=100, command=dialog.destroy,
-        fg_color=COLORS["surface"], hover_color=COLORS["surface_alt"],
+        dialog,
+        text="Close",
+        width=100,
+        command=dialog.destroy,
+        fg_color=COLORS["surface"],
+        hover_color=COLORS["surface_alt"],
         text_color=COLORS["fg"],
     ).pack(pady=(0, 20))
 
@@ -251,6 +308,7 @@ def _show_permission_fix(parent: ctk.CTk, game_folder: Path | None, game_exe: st
 # ---------------------------------------------------------------------------
 # Main app
 # ---------------------------------------------------------------------------
+
 
 class TroubleshooterApp:
     def __init__(self) -> None:
@@ -320,8 +378,12 @@ class TroubleshooterApp:
         ).pack(side="left")
 
         self._refresh_btn = ctk.CTkButton(
-            header, text="Refresh", command=self._run_checks, width=90,
-            fg_color=COLORS["surface"], hover_color=COLORS["surface_alt"],
+            header,
+            text="Refresh",
+            command=self._run_checks,
+            width=90,
+            fg_color=COLORS["surface"],
+            hover_color=COLORS["surface_alt"],
             text_color=COLORS["fg"],
         )
         self._refresh_btn.pack(side="right", padx=(8, 0))
@@ -345,14 +407,22 @@ class TroubleshooterApp:
         folder_row.pack(fill="x", pady=(0, 8))
 
         ctk.CTkButton(
-            folder_row, text="Set Game Folder", command=self._pick_game_folder, width=140,
-            fg_color=COLORS["surface"], hover_color=COLORS["accent"],
+            folder_row,
+            text="Set Game Folder",
+            command=self._pick_game_folder,
+            width=140,
+            fg_color=COLORS["surface"],
+            hover_color=COLORS["accent"],
             text_color=COLORS["fg"],
         ).pack(side="left", padx=(0, 10))
 
         ctk.CTkButton(
-            folder_row, text="Fix Permissions", command=self._show_perm_fix, width=140,
-            fg_color=COLORS["surface"], hover_color=COLORS["accent"],
+            folder_row,
+            text="Fix Permissions",
+            command=self._show_perm_fix,
+            width=140,
+            fg_color=COLORS["surface"],
+            hover_color=COLORS["accent"],
             text_color=COLORS["fg"],
         ).pack(side="left", padx=(0, 10))
 
@@ -367,7 +437,9 @@ class TroubleshooterApp:
 
         # Progress bar
         self._progress = ctk.CTkProgressBar(
-            main, mode="indeterminate", height=4,
+            main,
+            mode="indeterminate",
+            height=4,
             fg_color=COLORS["surface"],
             progress_color=COLORS["accent"],
         )
@@ -388,17 +460,23 @@ class TroubleshooterApp:
         self._summary_label.pack(side="left")
 
         self._copy_btn = ctk.CTkButton(
-            results_header, text="Copy to Clipboard", width=130, height=26,
+            results_header,
+            text="Copy to Clipboard",
+            width=130,
+            height=26,
             command=self._copy_results_to_clipboard,
-            fg_color=COLORS["surface"], hover_color=COLORS["surface_alt"],
-            text_color=COLORS["fg"], font=("Segoe UI", 11),
+            fg_color=COLORS["surface"],
+            hover_color=COLORS["surface_alt"],
+            text_color=COLORS["fg"],
+            font=("Segoe UI", 11),
         )
         self._copy_btn.pack(side="right")
         self._copy_btn.pack_forget()  # Hidden until results exist
 
         # Results
         self.results_frame = ctk.CTkScrollableFrame(
-            main, corner_radius=8,
+            main,
+            corner_radius=8,
             fg_color=COLORS["bg_alt"],
             scrollbar_button_color=COLORS["surface"],
             scrollbar_button_hover_color=COLORS["accent"],
@@ -406,8 +484,12 @@ class TroubleshooterApp:
         self.results_frame.pack(fill="both", expand=True, pady=(0, 10))
 
         ctk.CTkButton(
-            main, text="Close", command=self.root.destroy, width=100,
-            fg_color=COLORS["surface"], hover_color=COLORS["red"],
+            main,
+            text="Close",
+            command=self.root.destroy,
+            width=100,
+            fg_color=COLORS["surface"],
+            hover_color=COLORS["red"],
             text_color=COLORS["fg"],
         ).pack(pady=(5, 0))
 
@@ -417,14 +499,18 @@ class TroubleshooterApp:
         game_name = self._game_var.get()
         key = GAME_MANIFEST_KEYS.get(game_name)
 
-        self._game_folder_label.configure(text="Scanning...", text_color=COLORS["fg_muted"])
+        self._game_folder_label.configure(
+            text="Scanning...", text_color=COLORS["fg_muted"]
+        )
         self.root.update_idletasks()
 
         game_folder, _ = autoscan(key) if key else (None, None)
 
         if game_folder:
             self._game_folder = game_folder
-            self._game_folder_label.configure(text=str(game_folder), text_color=COLORS["fg"])
+            self._game_folder_label.configure(
+                text=str(game_folder), text_color=COLORS["fg"]
+            )
         else:
             self._game_folder = None
             self._game_folder_label.configure(
@@ -530,10 +616,11 @@ class TroubleshooterApp:
 
     def _create_result_widget(self, result: DiagnosticResult) -> None:
         color = STATUS_COLORS.get(result.status, COLORS["blue"])
-        icon  = STATUS_ICONS.get(result.status, "i")
+        icon = STATUS_ICONS.get(result.status, "i")
 
         card = ctk.CTkFrame(
-            self.results_frame, corner_radius=8,
+            self.results_frame,
+            corner_radius=8,
             fg_color=COLORS["surface"],
         )
         card.pack(fill="x", padx=4, pady=4)
@@ -585,7 +672,8 @@ class TroubleshooterApp:
             fix.pack(fill="x", padx=12, pady=(0, 10))
 
             ctk.CTkLabel(
-                fix, text="Suggested Fix:",
+                fix,
+                text="Suggested Fix:",
                 font=("Segoe UI", 11, "bold"),
                 text_color=COLORS["fg_muted"],
             ).pack(anchor="w", padx=8, pady=(6, 2))
@@ -603,13 +691,22 @@ class TroubleshooterApp:
                             text = "\n".join(pending).strip()
                             if text:
                                 ctk.CTkLabel(
-                                    fix, text=text, font=("Segoe UI", 11),
-                                    wraplength=630, justify="left",
+                                    fix,
+                                    text=text,
+                                    font=("Segoe UI", 11),
+                                    wraplength=630,
+                                    justify="left",
                                     text_color=COLORS["fg"],
                                 ).pack(anchor="w", padx=8, pady=(0, 4))
                             pending = []
-                        cmd = ctk.CTkTextbox(fix, height=28, font=("Consolas", 10), wrap="none",
-                                             fg_color=COLORS["bg"], text_color=COLORS["fg"])
+                        cmd = ctk.CTkTextbox(
+                            fix,
+                            height=28,
+                            font=("Consolas", 10),
+                            wrap="none",
+                            fg_color=COLORS["bg"],
+                            text_color=COLORS["fg"],
+                        )
                         cmd.pack(fill="x", padx=8, pady=2)
                         cmd.insert("1.0", line.strip())
                         cmd.configure(state="disabled")
@@ -619,14 +716,20 @@ class TroubleshooterApp:
                     text = "\n".join(pending).strip()
                     if text:
                         ctk.CTkLabel(
-                            fix, text=text, font=("Segoe UI", 11),
-                            wraplength=630, justify="left",
+                            fix,
+                            text=text,
+                            font=("Segoe UI", 11),
+                            wraplength=630,
+                            justify="left",
                             text_color=COLORS["fg"],
                         ).pack(anchor="w", padx=8, pady=(0, 6))
             else:
                 ctk.CTkLabel(
-                    fix, text=result.fix_action, font=("Segoe UI", 11),
-                    wraplength=630, justify="left",
+                    fix,
+                    text=result.fix_action,
+                    font=("Segoe UI", 11),
+                    wraplength=630,
+                    justify="left",
                     text_color=COLORS["fg"],
                 ).pack(anchor="w", padx=8, pady=(0, 6))
 
@@ -645,7 +748,9 @@ class TroubleshooterApp:
         if counts["error"]:
             parts.append(f"{counts['error']} error{'s' if counts['error'] > 1 else ''}")
         if counts["warning"]:
-            parts.append(f"{counts['warning']} warning{'s' if counts['warning'] > 1 else ''}")
+            parts.append(
+                f"{counts['warning']} warning{'s' if counts['warning'] > 1 else ''}"
+            )
         if counts["info"]:
             parts.append(f"{counts['info']} info")
 
@@ -663,14 +768,20 @@ class TroubleshooterApp:
 
         # Only copy non-ok results, exclude platform-specific unavailable checks
         relevant = [
-            r for r in self._current_results 
-            if r.status != "ok" 
-            and not (r.name == "Steam Elevation Check" and "only available on Windows" in r.message)
+            r
+            for r in self._current_results
+            if r.status != "ok"
+            and not (
+                r.name == "Steam Elevation Check"
+                and "only available on Windows" in r.message
+            )
         ]
         if not relevant:
             # All green, nothing to copy
             self._copy_btn.configure(text="Nothing to copy")
-            self.root.after(1500, lambda: self._copy_btn.configure(text="Copy to Clipboard"))
+            self.root.after(
+                1500, lambda: self._copy_btn.configure(text="Copy to Clipboard")
+            )
             return
 
         lines = [
@@ -698,7 +809,9 @@ class TroubleshooterApp:
         except Exception:
             # Fallback if pyperclip fails
             self._copy_btn.configure(text="Copy failed")
-            self.root.after(1500, lambda: self._copy_btn.configure(text="Copy to Clipboard"))
+            self.root.after(
+                1500, lambda: self._copy_btn.configure(text="Copy to Clipboard")
+            )
 
     def run(self) -> None:
         self.root.mainloop()
