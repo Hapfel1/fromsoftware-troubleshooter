@@ -315,7 +315,7 @@ def _show_permission_fix(
     else:
         ctk.CTkLabel(
             inner,
-            text="   • OR: In Steam, uninstall the game, manually delete the game folder, reinstall",
+            text="   • OR: In Steam, uninstall game, manually delete game folder, reinstall",
             font=("Segoe UI", 11),
             text_color=COLORS["fg_muted"],
             anchor="w",
@@ -443,15 +443,19 @@ class TroubleshooterApp:
             text_color=COLORS["fg"],
         ).pack(side="left", padx=(0, 10))
 
-        ctk.CTkButton(
-            folder_row,
-            text="Fix Permissions",
-            command=self._show_perm_fix,
-            width=140,
-            fg_color=COLORS["surface"],
-            hover_color=COLORS["accent"],
-            text_color=COLORS["fg"],
-        ).pack(side="left", padx=(0, 10))
+        # Fix Permissions button (Windows only)
+        import os
+
+        if os.name == "nt":
+            ctk.CTkButton(
+                folder_row,
+                text="Fix Permissions",
+                command=self._show_perm_fix,
+                width=140,
+                fg_color=COLORS["surface"],
+                hover_color=COLORS["accent"],
+                text_color=COLORS["fg"],
+            ).pack(side="left", padx=(0, 10))
 
         self._game_folder_label = ctk.CTkLabel(
             folder_row,
