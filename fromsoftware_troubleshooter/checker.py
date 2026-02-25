@@ -1,4 +1,4 @@
-"""Standalone checker"""
+"""Standalone checker — no er_save_manager dependency."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def _load_manifest() -> dict:
         Path.cwd() / "game_file_sizes.json",  # working directory
     ]
     for candidate in candidates:
-        _dbg(f"manifest: checking {candidate} - exists={candidate.exists()}")
+        _dbg(f"manifest: checking {candidate} — exists={candidate.exists()}")
         if candidate.exists():
             try:
                 _MANIFEST_CACHE = json.loads(candidate.read_text())
@@ -133,7 +133,7 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
         return DiagnosticResult(
             name="Game Version Check",
             status="info",
-            message="No reference build ID recorded - size checks may not reflect the latest patch",
+            message="No reference build ID recorded — size checks may not reflect the latest patch",
         )
 
     current = _read_local_build_id(app_id)
@@ -142,7 +142,7 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
         return DiagnosticResult(
             name="Game Version Check",
             status="info",
-            message="Game not found in Steam libraries - cannot verify build ID",
+            message="Game not found in Steam libraries — cannot verify build ID",
         )
 
     if current != stored:
@@ -448,7 +448,7 @@ def autoscan(manifest_key: str) -> tuple[Path | None, Path | None]:
 # Process lists
 # ---------------------------------------------------------------------------
 
-# High confidence - known to cause crashes or EAC issues
+# High confidence — known to cause crashes or EAC issues
 PROBLEMATIC_PROCESSES = [
     # Windows
     "vgtray.exe",
@@ -477,7 +477,7 @@ PROBLEMATIC_PROCESSES = [
     "TrusteerEndpointProtection.exe",  # Trusteer Rapport
 ]
 
-# Low confidence - unlikely to cause issues but worth knowing
+# Low confidence — unlikely to cause issues but worth knowing
 INFORMATIONAL_PROCESSES = [
     # Windows
     "Discord.exe",
@@ -629,7 +629,7 @@ class BaseChecker:
             return DiagnosticResult(
                 name="Game Executable",
                 status="ok",
-                message=f"{self.EXE_NAME} found - {_format_size(actual_size)}",
+                message=f"{self.EXE_NAME} found — {_format_size(actual_size)}",
             )
         elif size_status == "warning":
             expected = _format_size(entry["exact"]) if entry else "unknown"
@@ -647,7 +647,7 @@ class BaseChecker:
         return DiagnosticResult(
             name="Game Executable",
             status="info",
-            message=f"{self.EXE_NAME} found - {_format_size(actual_size)} (no reference size available)",
+            message=f"{self.EXE_NAME} found — {_format_size(actual_size)} (no reference size available)",
         )
 
     def _check_piracy_indicators(self) -> list[DiagnosticResult]:
@@ -750,7 +750,7 @@ class BaseChecker:
             return DiagnosticResult(
                 name="Regulation File",
                 status="ok",
-                message=f"regulation.bin is valid - {_format_size(actual_size)}",
+                message=f"regulation.bin is valid — {_format_size(actual_size)}",
             )
         elif size_status == "warning":
             expected = _format_size(entry["exact"]) if entry else "unknown"
@@ -768,7 +768,7 @@ class BaseChecker:
         return DiagnosticResult(
             name="Regulation File",
             status="info",
-            message=f"regulation.bin found - {_format_size(actual_size)} (no reference size available)",
+            message=f"regulation.bin found — {_format_size(actual_size)} (no reference size available)",
         )
 
     def _check_problematic_processes(self) -> list[DiagnosticResult]:
@@ -897,7 +897,7 @@ class BaseChecker:
                 DiagnosticResult(
                     name="VPN Detected",
                     status="warning",
-                    message="Active VPN client(s) detected - may cause multiplayer issues:",
+                    message="Active VPN client(s) detected — may cause multiplayer issues:",
                     bullet_items=running_vpns,
                     fix_available=True,
                     fix_action="Disable or exit your VPN before playing online.",
@@ -1013,7 +1013,7 @@ class BaseChecker:
                     f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
                     "5. If issues persist:\n"
                     "   • Reinstall Steam (download installer from steampowered.com and run)\n"
-                    "   • OR: In Steam, uninstall the game, then manually delete the entire Game folder at\n"
+                    "   • OR: In Steam, uninstall game, then manually delete entire folder at\n"
                     f"     {self.game_folder}, restart Steam, and reinstall the game"
                 )
                 return DiagnosticResult(
@@ -1024,32 +1024,10 @@ class BaseChecker:
                     fix_action=fix_message,
                 )
             elif output == "normal":
-                # Add info result with permission fix for users who previously ran as admin
-                appdata_path = Path(os.environ.get("APPDATA", "")) / self.GAME_NAME
-                username = os.environ.get("USERNAME", "YourUsername")
-                perm_fix = (
-                    "If you previously ran Steam as administrator or are getting error 740, follow these steps:\n\n"
-                    "1. Exit Steam completely\n\n"
-                    "2. Right-click steam.exe > Properties > Compatibility tab\n"
-                    "   → Uncheck 'Run this program as an administrator'\n\n"
-                    f"3. Right-click {self.EXE_NAME} in game folder > Properties > Compatibility tab\n"
-                    "   → Uncheck 'Run this program as an administrator'\n\n"
-                    "4. Take Ownership (PowerShell as Admin):\n\n"
-                    f'takeown /F "{self.game_folder}" /R /D Y\n'
-                    f'icacls "{self.game_folder}" /grant {username}:F /T\n\n'
-                    f'takeown /F "{appdata_path}" /R /D Y\n'
-                    f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
-                    "5. If issues persist:\n"
-                    "   • Reinstall Steam (download installer from steampowered.com and run)\n"
-                    "   • OR: In Steam, uninstall the game, then manually delete the entire Game folder at\n"
-                    f"     {self.game_folder}, restart Steam, and reinstall the game"
-                )
                 return DiagnosticResult(
                     name="Steam Elevation Check",
                     status="ok",
                     message="Steam is running with normal privileges",
-                    fix_available=True,
-                    fix_action=perm_fix,
                 )
             return DiagnosticResult(
                 name="Steam Elevation Check",
@@ -1086,7 +1064,7 @@ class BaseChecker:
                 DiagnosticResult(
                     name="Save File Permissions",
                     status="error",
-                    message="Cannot read save file - check file permissions",
+                    message="Cannot read save file — check file permissions",
                     fix_available=True,
                     fix_action="Run as administrator or check file permissions",
                 )
@@ -1105,7 +1083,7 @@ class BaseChecker:
                 DiagnosticResult(
                     name="Save File Size",
                     status="error",
-                    message=f"Save file suspiciously small ({file_size:,} bytes) - may be corrupted",
+                    message=f"Save file suspiciously small ({file_size:,} bytes) — may be corrupted",
                 )
             )
         else:
@@ -1149,7 +1127,7 @@ class EldenRingChecker(BaseChecker):
     EXE_NAME = "eldenring.exe"
     SAVE_FILE_NAME = "ER0000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
+    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1158,25 +1136,6 @@ class EldenRingChecker(BaseChecker):
         "steam_emu.ini",
         "winmm.dll",
         "dinput8.dll",
-        "Language Selector.exe",
-        "Origins.ini",
-        "StubDRM64.dll",
-        "steam_api64.cdx",
-        "codex64.dll",
-        "Gold-Team.Org.txt",
-        "Crack.rar",
-        "Www.Gold-Team.Org.html",
-        "SteamFix.ini",
-        "SteamFix64.dll",
-        "FreeTP.Org.html",
-        "DSfix.ini",
-        "DSfixKeys.ini",
-        "unins000.exe",
-        "unins000.dat",
-        "cream_api.ini",
-        "cream_api64.dll",
-        "steam_api64_o.dll",
-        "eldenring.cdx",
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
@@ -1192,7 +1151,7 @@ class NightReignChecker(BaseChecker):
     EXE_NAME = "nightreign.exe"
     SAVE_FILE_NAME = "NR0000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
+    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1201,25 +1160,6 @@ class NightReignChecker(BaseChecker):
         "steam_emu.ini",
         "winmm.dll",
         "dinput8.dll",
-        "Language Selector.exe",
-        "Origins.ini",
-        "StubDRM64.dll",
-        "steam_api64.cdx",
-        "codex64.dll",
-        "Gold-Team.Org.txt",
-        "Crack.rar",
-        "Www.Gold-Team.Org.html",
-        "SteamFix.ini",
-        "SteamFix64.dll",
-        "FreeTP.Org.html",
-        "DSfix.ini",
-        "DSfixKeys.ini",
-        "unins000.exe",
-        "unins000.dat",
-        "cream_api.ini",
-        "cream_api64.dll",
-        "steam_api64_o.dll",
-        "nightreign.cdx",
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
@@ -1234,8 +1174,8 @@ class DarkSouls1Checker(BaseChecker):
     MANIFEST_KEY = "dark_souls_remastered"
     EXE_NAME = "DarkSoulsRemastered.exe"
     SAVE_FILE_NAME = "DRAKS0005.sl2"
-    GAME_SUBFOLDER = ""  # flat - files sit directly in install root
-    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
+    GAME_SUBFOLDER = ""  # flat — files sit directly in install root
+    PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1243,26 +1183,6 @@ class DarkSouls1Checker(BaseChecker):
         "steam_api64.rne",
         "steam_emu.ini",
         "winmm.dll",
-        "dinput8.dll",
-        "Language Selector.exe",
-        "Origins.ini",
-        "StubDRM64.dll",
-        "steam_api64.cdx",
-        "codex64.dll",
-        "Gold-Team.Org.txt",
-        "Crack.rar",
-        "Www.Gold-Team.Org.html",
-        "SteamFix.ini",
-        "SteamFix64.dll",
-        "FreeTP.Org.html",
-        "DSfix.ini",
-        "DSfixKeys.ini",
-        "unins000.exe",
-        "unins000.dat",
-        "cream_api.ini",
-        "cream_api64.dll",
-        "steam_api64_o.dll",
-        "DarkSoulsRemastered.cdx",
     ]
 
 
@@ -1272,7 +1192,7 @@ class DarkSouls2Checker(BaseChecker):
     EXE_NAME = "DarkSoulsII.exe"
     SAVE_FILE_NAME = "DS2SOFS0000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
+    PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1280,26 +1200,6 @@ class DarkSouls2Checker(BaseChecker):
         "steam_api64.rne",
         "steam_emu.ini",
         "winmm.dll",
-        "dinput8.dll",
-        "Language Selector.exe",
-        "Origins.ini",
-        "StubDRM64.dll",
-        "steam_api64.cdx",
-        "codex64.dll",
-        "Gold-Team.Org.txt",
-        "Crack.rar",
-        "Www.Gold-Team.Org.html",
-        "SteamFix.ini",
-        "SteamFix64.dll",
-        "FreeTP.Org.html",
-        "DSfix.ini",
-        "DSfixKeys.ini",
-        "unins000.exe",
-        "unins000.dat",
-        "cream_api.ini",
-        "cream_api64.dll",
-        "steam_api64_o.dll",
-        "DarkSoulsII.cdx",
     ]
 
 
@@ -1309,7 +1209,7 @@ class DarkSouls3Checker(BaseChecker):
     EXE_NAME = "DarkSoulsIII.exe"
     SAVE_FILE_NAME = "DS30000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
+    PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1318,25 +1218,6 @@ class DarkSouls3Checker(BaseChecker):
         "steam_emu.ini",
         "winmm.dll",
         "dinput8.dll",
-        "Language Selector.exe",
-        "Origins.ini",
-        "StubDRM64.dll",
-        "steam_api64.cdx",
-        "codex64.dll",
-        "Gold-Team.Org.txt",
-        "Crack.rar",
-        "Www.Gold-Team.Org.html",
-        "SteamFix.ini",
-        "SteamFix64.dll",
-        "FreeTP.Org.html",
-        "DSfix.ini",
-        "DSfixKeys.ini",
-        "unins000.exe",
-        "unins000.dat",
-        "cream_api.ini",
-        "cream_api64.dll",
-        "steam_api64_o.dll",
-        "DarkSoulsIII.cdx",
     ]
 
 
@@ -1345,8 +1226,8 @@ class SekiroChecker(BaseChecker):
     MANIFEST_KEY = "sekiro"
     EXE_NAME = "sekiro.exe"
     SAVE_FILE_NAME = "S0000.sl2"
-    GAME_SUBFOLDER = ""  # flat - files sit directly in install root
-    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
+    GAME_SUBFOLDER = ""  # flat — files sit directly in install root
+    PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1354,26 +1235,6 @@ class SekiroChecker(BaseChecker):
         "steam_api64.rne",
         "steam_emu.ini",
         "winmm.dll",
-        "dinput8.dll",
-        "Language Selector.exe",
-        "Origins.ini",
-        "StubDRM64.dll",
-        "steam_api64.cdx",
-        "codex64.dll",
-        "Gold-Team.Org.txt",
-        "Crack.rar",
-        "Www.Gold-Team.Org.html",
-        "SteamFix.ini",
-        "SteamFix64.dll",
-        "FreeTP.Org.html",
-        "DSfix.ini",
-        "DSfixKeys.ini",
-        "unins000.exe",
-        "unins000.dat",
-        "cream_api.ini",
-        "cream_api64.dll",
-        "steam_api64_o.dll",
-        "sekiro.cdx",
     ]
 
 
@@ -1383,7 +1244,7 @@ class ArmoredCore6Checker(BaseChecker):
     EXE_NAME = "armoredcore6.exe"
     SAVE_FILE_NAME = "AC60000.sl2"
     GAME_SUBFOLDER = "Game"
-    PIRACY_FOLDERS = ["_CommonRedist", "AdvGuide", "ArtbookOST", "Original Soundtrack"]
+    PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
         "OnlineFix.ini",
@@ -1392,25 +1253,6 @@ class ArmoredCore6Checker(BaseChecker):
         "steam_emu.ini",
         "winmm.dll",
         "dinput8.dll",
-        "Language Selector.exe",
-        "Origins.ini",
-        "StubDRM64.dll",
-        "steam_api64.cdx",
-        "codex64.dll",
-        "Gold-Team.Org.txt",
-        "Crack.rar",
-        "Www.Gold-Team.Org.html",
-        "SteamFix.ini",
-        "SteamFix64.dll",
-        "FreeTP.Org.html",
-        "DSfix.ini",
-        "DSfixKeys.ini",
-        "unins000.exe",
-        "unins000.dat",
-        "cream_api.ini",
-        "cream_api64.dll",
-        "steam_api64_o.dll",
-        "armoredcore6.cdx",
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
