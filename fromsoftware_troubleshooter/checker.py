@@ -585,7 +585,55 @@ class BaseChecker:
         return results
 
     def _check_extra(self) -> list[DiagnosticResult]:
-        return []
+        results: list[DiagnosticResult] = []
+        # Check for Fasoo DRM DLL (f_im.dll) in loaded modules (Windows only)
+        if _is_windows():
+            try:
+                import ctypes
+                import ctypes.wintypes
+
+                fasoo_found = False
+                # Get current process handle
+                k32 = ctypes.windll.kernel32
+                psapi = ctypes.windll.psapi
+                GetCurrentProcess = k32.GetCurrentProcess
+                EnumProcessModules = psapi.EnumProcessModules
+                GetModuleBaseNameW = psapi.GetModuleBaseNameW
+                hProcess = GetCurrentProcess()
+                HMODULE_ARR = ctypes.c_void_p * 1024
+                hMods = HMODULE_ARR()
+                cb = ctypes.sizeof(hMods)
+                cbNeeded = ctypes.c_ulong()
+                if EnumProcessModules(
+                    hProcess, ctypes.byref(hMods), cb, ctypes.byref(cbNeeded)
+                ):
+                    num_mods = int(cbNeeded.value / ctypes.sizeof(ctypes.c_void_p))
+                    for i in range(num_mods):
+                        mod = hMods[i]
+                        mod_name = ctypes.create_unicode_buffer(260)
+                        if GetModuleBaseNameW(hProcess, mod, mod_name, 260):
+                            if mod_name.value.lower() == "f_im.dll":
+                                fasoo_found = True
+                                break
+                if fasoo_found:
+                    results.append(
+                        DiagnosticResult(
+                            name="Fasoo DRM Detected",
+                            status="error",
+                            message="Fasoo DRM Client (f_im.dll) is loaded in this process. This DRM is known to cause issues with FromSoftware games and may interfere with normal operation.",
+                            fix_available=True,
+                            fix_action="Uninstall Fasoo DRM Client (Kyobo Book Wix or similar) and reboot your system.",
+                        )
+                    )
+            except Exception as e:
+                results.append(
+                    DiagnosticResult(
+                        name="Fasoo DRM Check",
+                        status="warning",
+                        message=f"Could not check for Fasoo DRM: {e}",
+                    )
+                )
+        return results
 
     def _check_game_installation(self) -> DiagnosticResult:
         if not self.game_folder:
