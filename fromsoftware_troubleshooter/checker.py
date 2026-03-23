@@ -897,6 +897,28 @@ class BaseChecker:
                 )
             )
 
+        discord_names = {"discord"}
+        discord_running = any(
+            n.replace(".exe", "").lower() in discord_names for n in running_names
+        )
+        if discord_running:
+            results.append(
+                DiagnosticResult(
+                    name="Discord Clip Feature Warning",
+                    status="warning",
+                    message=(
+                        "Discord is running. Its clip/screen capture feature can interfere "
+                        "with game launching and cause crashes or hangs on startup."
+                    ),
+                    fix_available=True,
+                    fix_action=(
+                        "Disable Discord's clip feature: "
+                        "User Settings > Voice & Video > scroll to Screen Share / Clips "
+                        "and turn off 'Enable Clips'."
+                    ),
+                )
+            )
+
         if not running and not process_lasso_scheduled:
             results.append(
                 DiagnosticResult(
