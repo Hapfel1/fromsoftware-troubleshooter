@@ -845,6 +845,7 @@ class BaseChecker:
         ]
 
         process_lasso_scheduled = False
+        system_explorer_scheduled = False
         if _is_windows():
             try:
                 schtasks = subprocess.check_output(
@@ -852,8 +853,11 @@ class BaseChecker:
                     text=True,
                     creationflags=subprocess.CREATE_NO_WINDOW,
                 )
-                if "processlasso" in schtasks.lower():
+                schtasks_lower = schtasks.lower()
+                if "processlasso" in schtasks_lower:
                     process_lasso_scheduled = True
+                if "systemexplorer" in schtasks_lower or "system explorer" in schtasks_lower:
+                    system_explorer_scheduled = True
             except Exception:
                 pass
 
@@ -884,6 +888,24 @@ class BaseChecker:
                     message="Process Lasso can cause flashbang crashes on launch.",
                     fix_available=True,
                     fix_action="1. Close Process Lasso if running\n2. Disable in Task Manager > Startup tab\n3. Remove from Task Scheduler > Task Scheduler Library",
+                )
+            )
+
+        system_explorer_running = any(
+            "systemexplorer" in p.lower() for p in running
+        )
+        if system_explorer_running or system_explorer_scheduled:
+            results.append(
+                DiagnosticResult(
+                    name="System Explorer Detected",
+                    status="error",
+                    message="System Explorer can cause white flashbang crashes on launch.",
+                    fix_available=True,
+                    fix_action=(
+                        "1. Close System Explorer if running\n"
+                        "2. Disable in Task Manager > Startup tab\n"
+                        "3. Remove from Task Scheduler > Task Scheduler Library"
+                    ),
                 )
             )
 
@@ -919,7 +941,7 @@ class BaseChecker:
                 )
             )
 
-        if not running and not process_lasso_scheduled:
+        if not running and not process_lasso_scheduled and not system_explorer_scheduled:
             results.append(
                 DiagnosticResult(
                     name="Process Check",
