@@ -806,6 +806,7 @@ class TroubleshooterApp:
                 r.name == "Steam Elevation Check"
                 and "only available on Windows" in r.message
             )
+            and r.name != "Discord Clip Feature Warning"
         ]
         if not relevant:
             # All green, nothing to copy
@@ -816,7 +817,7 @@ class TroubleshooterApp:
             return
 
         lines = [
-            f"FromSoftware Troubleshooter — {self._game_var.get()}",
+            f"FromSoftware Troubleshooter - {self._game_var.get()}",
             "=" * 60,
             "",
         ]

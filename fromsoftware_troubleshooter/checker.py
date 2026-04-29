@@ -1,4 +1,4 @@
-"""Standalone checker — no er_save_manager dependency."""
+"""Standalone checker - no er_save_manager dependency."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def _load_manifest() -> dict:
         Path.cwd() / "game_file_sizes.json",  # working directory
     ]
     for candidate in candidates:
-        _dbg(f"manifest: checking {candidate} — exists={candidate.exists()}")
+        _dbg(f"manifest: checking {candidate} - exists={candidate.exists()}")
         if candidate.exists():
             try:
                 _MANIFEST_CACHE = json.loads(candidate.read_text())
@@ -133,7 +133,7 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
         return DiagnosticResult(
             name="Game Version Check",
             status="info",
-            message="No reference build ID recorded — size checks may not reflect the latest patch",
+            message="No reference build ID recorded - size checks may not reflect the latest patch",
         )
 
     current = _read_local_build_id(app_id)
@@ -142,7 +142,7 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
         return DiagnosticResult(
             name="Game Version Check",
             status="info",
-            message="Game not found in Steam libraries — cannot verify build ID",
+            message="Game not found in Steam libraries - cannot verify build ID",
         )
 
     if current != stored:
@@ -448,7 +448,7 @@ def autoscan(manifest_key: str) -> tuple[Path | None, Path | None]:
 # Process lists
 # ---------------------------------------------------------------------------
 
-# High confidence — known to cause crashes or EAC issues
+# High confidence - known to cause crashes or EAC issues
 PROBLEMATIC_PROCESSES = [
     # Windows
     "vgtray.exe",
@@ -477,7 +477,7 @@ PROBLEMATIC_PROCESSES = [
     "TrusteerEndpointProtection.exe",  # Trusteer Rapport
 ]
 
-# Low confidence — unlikely to cause issues but worth knowing
+# Low confidence - unlikely to cause issues but worth knowing
 INFORMATIONAL_PROCESSES = [
     # Windows
     "Discord.exe",
@@ -677,7 +677,7 @@ class BaseChecker:
             return DiagnosticResult(
                 name="Game Executable",
                 status="ok",
-                message=f"{self.EXE_NAME} found — {_format_size(actual_size)}",
+                message=f"{self.EXE_NAME} found - {_format_size(actual_size)}",
             )
         elif size_status == "warning":
             expected = _format_size(entry["exact"]) if entry else "unknown"
@@ -695,7 +695,7 @@ class BaseChecker:
         return DiagnosticResult(
             name="Game Executable",
             status="info",
-            message=f"{self.EXE_NAME} found — {_format_size(actual_size)} (no reference size available)",
+            message=f"{self.EXE_NAME} found - {_format_size(actual_size)} (no reference size available)",
         )
 
     def _check_piracy_indicators(self) -> list[DiagnosticResult]:
@@ -798,7 +798,7 @@ class BaseChecker:
             return DiagnosticResult(
                 name="Regulation File",
                 status="ok",
-                message=f"regulation.bin is valid — {_format_size(actual_size)}",
+                message=f"regulation.bin is valid - {_format_size(actual_size)}",
             )
         elif size_status == "warning":
             expected = _format_size(entry["exact"]) if entry else "unknown"
@@ -816,7 +816,7 @@ class BaseChecker:
         return DiagnosticResult(
             name="Regulation File",
             status="info",
-            message=f"regulation.bin found — {_format_size(actual_size)} (no reference size available)",
+            message=f"regulation.bin found - {_format_size(actual_size)} (no reference size available)",
         )
 
     def _check_problematic_processes(self) -> list[DiagnosticResult]:
@@ -845,7 +845,6 @@ class BaseChecker:
         ]
 
         process_lasso_scheduled = False
-        system_explorer_scheduled = False
         if _is_windows():
             try:
                 schtasks = subprocess.check_output(
@@ -853,11 +852,8 @@ class BaseChecker:
                     text=True,
                     creationflags=subprocess.CREATE_NO_WINDOW,
                 )
-                schtasks_lower = schtasks.lower()
-                if "processlasso" in schtasks_lower:
+                if "processlasso" in schtasks.lower():
                     process_lasso_scheduled = True
-                if "systemexplorer" in schtasks_lower or "system explorer" in schtasks_lower:
-                    system_explorer_scheduled = True
             except Exception:
                 pass
 
@@ -891,24 +887,6 @@ class BaseChecker:
                 )
             )
 
-        system_explorer_running = any(
-            "systemexplorer" in p.lower() for p in running
-        )
-        if system_explorer_running or system_explorer_scheduled:
-            results.append(
-                DiagnosticResult(
-                    name="System Explorer Detected",
-                    status="error",
-                    message="System Explorer can cause white flashbang crashes on launch.",
-                    fix_available=True,
-                    fix_action=(
-                        "1. Close System Explorer if running\n"
-                        "2. Disable in Task Manager > Startup tab\n"
-                        "3. Remove from Task Scheduler > Task Scheduler Library"
-                    ),
-                )
-            )
-
         if info_running:
             results.append(
                 DiagnosticResult(
@@ -919,9 +897,8 @@ class BaseChecker:
                 )
             )
 
-        discord_names = {"discord"}
         discord_running = any(
-            n.replace(".exe", "").lower() in discord_names for n in running_names
+            n.replace(".exe", "").lower() == "discord" for n in running_names
         )
         if discord_running:
             results.append(
@@ -929,19 +906,20 @@ class BaseChecker:
                     name="Discord Clip Feature Warning",
                     status="warning",
                     message=(
-                        "Discord is running. Its clip/screen capture feature can interfere "
-                        "with game launching and cause crashes or hangs on startup."
+                        "Discord is running. If you have an active Nitro subscription, "
+                        "Discord's clip feature may be enabled and can interfere with "
+                        "game launching, causing crashes or hangs on startup."
                     ),
                     fix_available=True,
                     fix_action=(
-                        "Disable Discord's clip feature: "
-                        "User Settings > Voice & Video > scroll to Screen Share / Clips "
+                        "If you have Nitro, disable clips: "
+                        "User Settings > Voice & Video > Clips "
                         "and turn off 'Enable Clips'."
                     ),
                 )
             )
 
-        if not running and not process_lasso_scheduled and not system_explorer_scheduled:
+        if not running and not process_lasso_scheduled:
             results.append(
                 DiagnosticResult(
                     name="Process Check",
@@ -989,7 +967,7 @@ class BaseChecker:
                 DiagnosticResult(
                     name="VPN Detected",
                     status="warning",
-                    message="Active VPN client(s) detected — may cause multiplayer issues:",
+                    message="Active VPN client(s) detected - may cause multiplayer issues:",
                     bullet_items=running_vpns,
                     fix_available=True,
                     fix_action="Disable or exit your VPN before playing online.",
@@ -1156,7 +1134,7 @@ class BaseChecker:
                 DiagnosticResult(
                     name="Save File Permissions",
                     status="error",
-                    message="Cannot read save file — check file permissions",
+                    message="Cannot read save file - check file permissions",
                     fix_available=True,
                     fix_action="Run as administrator or check file permissions",
                 )
@@ -1175,7 +1153,7 @@ class BaseChecker:
                 DiagnosticResult(
                     name="Save File Size",
                     status="error",
-                    message=f"Save file suspiciously small ({file_size:,} bytes) — may be corrupted",
+                    message=f"Save file suspiciously small ({file_size:,} bytes) - may be corrupted",
                 )
             )
         else:
@@ -1266,7 +1244,7 @@ class DarkSouls1Checker(BaseChecker):
     MANIFEST_KEY = "dark_souls_remastered"
     EXE_NAME = "DarkSoulsRemastered.exe"
     SAVE_FILE_NAME = "DRAKS0005.sl2"
-    GAME_SUBFOLDER = ""  # flat — files sit directly in install root
+    GAME_SUBFOLDER = ""  # flat - files sit directly in install root
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
@@ -1318,7 +1296,7 @@ class SekiroChecker(BaseChecker):
     MANIFEST_KEY = "sekiro"
     EXE_NAME = "sekiro.exe"
     SAVE_FILE_NAME = "S0000.sl2"
-    GAME_SUBFOLDER = ""  # flat — files sit directly in install root
+    GAME_SUBFOLDER = ""  # flat - files sit directly in install root
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
