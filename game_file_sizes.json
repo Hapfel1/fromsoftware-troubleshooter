@@ -19,7 +19,7 @@
     }
   },
   "nightreign": {
-    "build_id": 21385908,
+    "build_id": 22392510,
     "exe": {
       "exact": 118775416,
       "min": 118775406,
@@ -31,9 +31,9 @@
       "max": 295346
     },
     "regulation.bin": {
-      "exact": 1974704,
-      "min": 1974694,
-      "max": 1974714
+      "exact": 1974720,
+      "min": 1974710,
+      "max": 1974730
     }
   },
   "dark_souls_remastered": {
