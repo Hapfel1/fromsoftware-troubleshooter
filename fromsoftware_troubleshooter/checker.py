@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import re
+import ssl
 import subprocess
 import urllib.request
 from dataclasses import dataclass
@@ -56,6 +57,19 @@ def _load_manifest() -> dict:
             _MANIFEST_CACHE = json.loads(resp.read().decode())
             _dbg(f"manifest: loaded from remote, keys={list(_MANIFEST_CACHE.keys())}")
             return _MANIFEST_CACHE
+    except ssl.SSLError:
+        # Frozen builds (PyInstaller/cx_Freeze) often lack a cert bundle - retry unverified.
+        _dbg("manifest: SSL cert error, retrying without verification")
+        try:
+            ctx = ssl._create_unverified_context()
+            with urllib.request.urlopen(MANIFEST_URL, timeout=3, context=ctx) as resp:
+                _MANIFEST_CACHE = json.loads(resp.read().decode())
+                _dbg(
+                    f"manifest: loaded from remote (unverified), keys={list(_MANIFEST_CACHE.keys())}"
+                )
+                return _MANIFEST_CACHE
+        except Exception as e:
+            _dbg(f"manifest: unverified fetch also failed ({e}), trying local")
     except Exception as e:
         _dbg(f"manifest: remote fetch failed ({e}), trying local")
     # Local fallback: check several likely locations
