@@ -157,7 +157,7 @@ wheels = [
 
 [[package]]
 name = "fromsoftware-troubleshooter"
-version = "1.4.0"
+version = "1.4.1"
 source = { editable = "." }
 dependencies = [
     { name = "customtkinter" },
