@@ -61,12 +61,18 @@ def _load_manifest() -> dict:
         # urllib wraps ssl.SSLError inside URLError.reason in frozen builds.
         reason = getattr(e, "reason", e)
         if isinstance(reason, ssl.SSLError):
-            _dbg("manifest: SSL cert error (frozen build), retrying without verification")
+            _dbg(
+                "manifest: SSL cert error (frozen build), retrying without verification"
+            )
             try:
                 ctx = ssl._create_unverified_context()
-                with urllib.request.urlopen(MANIFEST_URL, timeout=3, context=ctx) as resp:
+                with urllib.request.urlopen(
+                    MANIFEST_URL, timeout=3, context=ctx
+                ) as resp:
                     _MANIFEST_CACHE = json.loads(resp.read().decode())
-                    _dbg(f"manifest: loaded from remote (unverified), keys={list(_MANIFEST_CACHE.keys())}")
+                    _dbg(
+                        f"manifest: loaded from remote (unverified), keys={list(_MANIFEST_CACHE.keys())}"
+                    )
                     return _MANIFEST_CACHE
             except Exception as e2:
                 _dbg(f"manifest: unverified fetch also failed ({e2}), trying local")
@@ -600,54 +606,143 @@ class BaseChecker:
 
     def _check_extra(self) -> list[DiagnosticResult]:
         results: list[DiagnosticResult] = []
-        # Check for Fasoo DRM DLL (f_im.dll) in loaded modules (Windows only)
         if _is_windows():
-            try:
-                import ctypes
-                import ctypes.wintypes
+            results.append(self._check_fasoo())
+        return results
 
-                fasoo_found = False
-                # Get current process handle
+    def _check_fasoo(self) -> DiagnosticResult:
+        """
+        Detect Fasoo DRM by checking known install locations on disk, then
+        scanning the game process modules as a secondary signal if the game
+        is running. Fasoo injects into other processes, not the checker itself,
+        so scanning the checker's own loaded modules is useless.
+        """
+        import ctypes
+        import ctypes.wintypes
+
+        # Known Fasoo DLL names (32-bit and 64-bit client, virtual rights component)
+        FASOO_DLLS = {"f_im.dll", "f_im64.dll", "fsvrt.dll"}
+
+        FIX = "Uninstall Fasoo DRM Client (Kyobo Book Wix or similar) and reboot."
+
+        # Primary: disk presence in known Fasoo install directories
+        program_files = [
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")),
+            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")),
+        ]
+        found_on_disk: list[str] = []
+        for base in program_files:
+            fasoo_dir = base / "Fasoo"
+            if not fasoo_dir.exists():
+                continue
+            for dll in FASOO_DLLS:
+                if (fasoo_dir / dll).exists():
+                    found_on_disk.append(str(fasoo_dir / dll))
+
+        if found_on_disk:
+            return DiagnosticResult(
+                name="Fasoo DRM Detected",
+                status="error",
+                message=(
+                    "Fasoo DRM is installed. It is known to cause crashes and "
+                    "infinite loading screens in FromSoftware games by injecting "
+                    f"into game processes. Found: {', '.join(found_on_disk)}"
+                ),
+                fix_available=True,
+                fix_action=FIX,
+            )
+
+        # Secondary: scan game process modules if the game is running
+        if self.EXE_NAME:
+            try:
                 k32 = ctypes.windll.kernel32
                 psapi = ctypes.windll.psapi
-                GetCurrentProcess = k32.GetCurrentProcess
-                EnumProcessModules = psapi.EnumProcessModules
-                GetModuleBaseNameW = psapi.GetModuleBaseNameW
-                hProcess = GetCurrentProcess()
-                HMODULE_ARR = ctypes.c_void_p * 1024
-                hMods = HMODULE_ARR()
-                cb = ctypes.sizeof(hMods)
-                cbNeeded = ctypes.c_ulong()
-                if EnumProcessModules(
-                    hProcess, ctypes.byref(hMods), cb, ctypes.byref(cbNeeded)
-                ):
-                    num_mods = int(cbNeeded.value / ctypes.sizeof(ctypes.c_void_p))
-                    for i in range(num_mods):
-                        mod = hMods[i]
-                        mod_name = ctypes.create_unicode_buffer(260)
-                        if GetModuleBaseNameW(hProcess, mod, mod_name, 260):
-                            if mod_name.value.lower() == "f_im.dll":
-                                fasoo_found = True
+
+                # Find the game PID by iterating snapshot of processes
+                TH32CS_SNAPPROCESS = 0x00000002
+
+                class PROCESSENTRY32(ctypes.Structure):
+                    _fields_ = [
+                        ("dwSize", ctypes.c_ulong),
+                        ("cntUsage", ctypes.c_ulong),
+                        ("th32ProcessID", ctypes.c_ulong),
+                        ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+                        ("th32ModuleID", ctypes.c_ulong),
+                        ("cntThreads", ctypes.c_ulong),
+                        ("th32ParentProcessID", ctypes.c_ulong),
+                        ("pcPriClassBase", ctypes.c_long),
+                        ("dwFlags", ctypes.c_ulong),
+                        ("szExeFile", ctypes.c_char * 260),
+                    ]
+
+                snapshot = k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+                if snapshot == ctypes.c_void_p(-1).value:
+                    raise OSError("CreateToolhelp32Snapshot failed")
+
+                game_pid: int | None = None
+                entry = PROCESSENTRY32()
+                entry.dwSize = ctypes.sizeof(PROCESSENTRY32)
+                try:
+                    if k32.Process32First(snapshot, ctypes.byref(entry)):
+                        while True:
+                            name = entry.szExeFile.decode("utf-8", errors="ignore")
+                            if name.lower() == self.EXE_NAME.lower():
+                                game_pid = entry.th32ProcessID
                                 break
-                if fasoo_found:
-                    results.append(
-                        DiagnosticResult(
-                            name="Fasoo DRM Detected",
-                            status="error",
-                            message="Fasoo DRM Client (f_im.dll) is loaded in this process. This DRM is known to cause issues with FromSoftware games and may interfere with normal operation.",
-                            fix_available=True,
-                            fix_action="Uninstall Fasoo DRM Client (Kyobo Book Wix or similar) and reboot your system.",
-                        )
+                            if not k32.Process32Next(snapshot, ctypes.byref(entry)):
+                                break
+                finally:
+                    k32.CloseHandle(snapshot)
+
+                if game_pid is not None:
+                    PROCESS_QUERY_INFORMATION = 0x0400
+                    PROCESS_VM_READ = 0x0010
+                    hProcess = k32.OpenProcess(
+                        PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, False, game_pid
                     )
+                    if hProcess:
+                        try:
+                            HMODULE_ARR = ctypes.c_void_p * 1024
+                            hMods = HMODULE_ARR()
+                            cbNeeded = ctypes.c_ulong()
+                            if psapi.EnumProcessModules(
+                                hProcess,
+                                ctypes.byref(hMods),
+                                ctypes.sizeof(hMods),
+                                ctypes.byref(cbNeeded),
+                            ):
+                                count = cbNeeded.value // ctypes.sizeof(ctypes.c_void_p)
+                                for i in range(count):
+                                    buf = ctypes.create_unicode_buffer(260)
+                                    if psapi.GetModuleBaseNameW(
+                                        hProcess, hMods[i], buf, 260
+                                    ):
+                                        if buf.value.lower() in FASOO_DLLS:
+                                            return DiagnosticResult(
+                                                name="Fasoo DRM Detected",
+                                                status="error",
+                                                message=(
+                                                    f"Fasoo DRM ({buf.value}) is loaded inside "
+                                                    f"{self.EXE_NAME}. This causes crashes and "
+                                                    "infinite loading screens."
+                                                ),
+                                                fix_available=True,
+                                                fix_action=FIX,
+                                            )
+                        finally:
+                            k32.CloseHandle(hProcess)
             except Exception as e:
-                results.append(
-                    DiagnosticResult(
-                        name="Fasoo DRM Check",
-                        status="warning",
-                        message=f"Could not check for Fasoo DRM: {e}",
-                    )
+                return DiagnosticResult(
+                    name="Fasoo DRM Check",
+                    status="warning",
+                    message=f"Could not scan game process modules for Fasoo DRM: {e}",
                 )
-        return results
+
+        return DiagnosticResult(
+            name="Fasoo DRM Check",
+            status="ok",
+            message="No Fasoo DRM detected",
+        )
 
     def _check_game_installation(self) -> DiagnosticResult:
         if not self.game_folder:
