@@ -8,6 +8,7 @@ import platform
 import re
 import ssl
 import subprocess
+import tempfile
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,11 +40,26 @@ _MANIFEST_CACHE: dict | None = None
 
 
 _DEBUG = os.environ.get("FST_DEBUG") == "1"
+_DEBUG_LOG_PATH = Path(tempfile.gettempdir()) / "fst_debug.log"
 
 
 def _dbg(msg: str) -> None:
-    if _DEBUG:
-        print(f"[FST] {msg}")
+    if not _DEBUG:
+        return
+    line = f"[FST] {msg}"
+    # print() is unreliable in the windowed Windows build (console=False in
+    # fromsoftware_troubleshooter_windows.spec means there is no attached
+    # console and sys.stdout is not a real stream), so always also write to
+    # a log file that works regardless of console availability.
+    try:
+        print(line)
+    except Exception:
+        pass
+    try:
+        with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
 
 
 def _load_manifest() -> dict:
@@ -220,6 +236,7 @@ def _get_runasadmin_scope(exe_path: Path) -> str | None:
     import winreg
 
     exe_str = str(exe_path.resolve()).lower()
+    _dbg(f"runasadmin: looking up {exe_str!r}")
     layers_path = r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
     hives = [
         (winreg.HKEY_CURRENT_USER, "current user"),
@@ -229,6 +246,7 @@ def _get_runasadmin_scope(exe_path: Path) -> str | None:
         try:
             key = winreg.OpenKey(hive, layers_path)
         except OSError:
+            _dbg(f"runasadmin: {scope_label} Layers key not present")
             continue
         try:
             index = 0
@@ -238,6 +256,7 @@ def _get_runasadmin_scope(exe_path: Path) -> str | None:
                 except OSError:
                     break
                 index += 1
+                _dbg(f"runasadmin: {scope_label} entry {name!r} = {value!r}")
                 if name.lower() == exe_str and "RUNASADMIN" in value.upper().split():
                     return scope_label
         finally:
@@ -1575,7 +1594,9 @@ class EldenRingChecker(BaseChecker):
                 )
             ]
 
-        password_match = re.search(r"(?im)^\s*cooppassword\s*=\s*(.*)$", ini_text)
+        password_match = re.search(
+            r"(?im)^[ \t]*cooppassword[ \t]*=[ \t]*(.*?)[ \t]*\r?$", ini_text
+        )
         password = password_match.group(1).strip() if password_match else ""
         if password:
             return []
