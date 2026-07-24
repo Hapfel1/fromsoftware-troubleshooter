@@ -618,6 +618,7 @@ class TroubleshooterApp:
         emit(checker._check_steam_running())
         if checker.game_folder and checker.game_folder.exists():
             emit(checker._check_game_executable())
+            emit(checker._check_run_as_admin_flag())
             emit(checker._check_extra())  # regulation.bin
             emit(checker._check_piracy_indicators())  # game integrity
         emit(checker._check_problematic_processes())
