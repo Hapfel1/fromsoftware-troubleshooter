@@ -211,6 +211,40 @@ def _is_windows() -> bool:
     return platform.system() == "Windows"
 
 
+def _get_runasadmin_scope(exe_path: Path) -> str | None:
+    """
+    Look up the persistent 'Run as administrator' compatibility flag for
+    exe_path in both the per-user and all-users AppCompatFlags registry
+    layers. Returns which scope has it set, or None if unset in both.
+    """
+    import winreg
+
+    exe_str = str(exe_path.resolve()).lower()
+    layers_path = r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
+    hives = [
+        (winreg.HKEY_CURRENT_USER, "current user"),
+        (winreg.HKEY_LOCAL_MACHINE, "all users"),
+    ]
+    for hive, scope_label in hives:
+        try:
+            key = winreg.OpenKey(hive, layers_path)
+        except OSError:
+            continue
+        try:
+            index = 0
+            while True:
+                try:
+                    name, value, _ = winreg.EnumValue(key, index)
+                except OSError:
+                    break
+                index += 1
+                if name.lower() == exe_str and "RUNASADMIN" in value.upper().split():
+                    return scope_label
+        finally:
+            winreg.CloseKey(key)
+    return None
+
+
 def _get_running_process_names() -> set[str]:
     """Return a set of lowercase running process names, cross-platform."""
     names: set[str] = set()
@@ -595,6 +629,7 @@ class BaseChecker:
         if self.game_folder and self.game_folder.exists():
             results.extend(self._check_piracy_indicators())
             results.append(self._check_game_executable())
+            results.append(self._check_run_as_admin_flag())
         results.extend(self._check_problematic_processes())
         results.extend(self._check_vpn_processes())
         results.append(self._check_steam_running())
@@ -805,6 +840,55 @@ class BaseChecker:
             name="Game Executable",
             status="info",
             message=f"{self.EXE_NAME} found - {_format_size(actual_size)} (no reference size available)",
+        )
+
+    def _check_run_as_admin_flag(self) -> DiagnosticResult:
+        """
+        Check the persistent 'Run as administrator' compatibility flag on the
+        game executable.
+        """
+        if not _is_windows():
+            return DiagnosticResult(
+                name="Run as Administrator Flag",
+                status="info",
+                message="Compatibility flag check only available on Windows",
+            )
+        game_dir = self._game_dir
+        if not game_dir or not self.EXE_NAME:
+            return DiagnosticResult(
+                name="Run as Administrator Flag",
+                status="info",
+                message="Game folder not set",
+            )
+        exe_path = game_dir / self.EXE_NAME
+        if not exe_path.exists():
+            return DiagnosticResult(
+                name="Run as Administrator Flag",
+                status="info",
+                message=f"{self.EXE_NAME} not found, skipping compatibility flag check",
+            )
+
+        scope = _get_runasadmin_scope(exe_path)
+        if scope:
+            return DiagnosticResult(
+                name="Run as Administrator Flag",
+                status="error",
+                message=(
+                    f"{self.EXE_NAME} is set to always run as administrator "
+                    f"({scope}). This causes permission issues and is not recommended"
+                ),
+                fix_available=True,
+                fix_action=(
+                    f"Right-click {self.EXE_NAME} > Properties > Compatibility tab\n"
+                    "-> Uncheck 'Run this program as an administrator'\n"
+                    "If the checkbox is greyed out, the flag is set for all users: "
+                    "click 'Change settings for all users' first."
+                ),
+            )
+        return DiagnosticResult(
+            name="Run as Administrator Flag",
+            status="ok",
+            message=f"{self.EXE_NAME} is not flagged to run as administrator",
         )
 
     def _check_piracy_indicators(self) -> list[DiagnosticResult]:
@@ -1300,6 +1384,39 @@ class BaseChecker:
 # ---------------------------------------------------------------------------
 
 
+def _find_seamless_coop_artifacts(
+    game_dir: Path,
+) -> tuple[Path | None, Path | None, Path | None]:
+    """
+    Locate ersc.dll, ersc_settings.ini, and ersc_launcher.exe anywhere under
+    game_dir, up to a shallow depth.
+    """
+    max_depth = 3
+    dll_path: Path | None = None
+    ini_path: Path | None = None
+    launcher_path: Path | None = None
+    stack: list[tuple[Path, int]] = [(game_dir, 0)]
+    while stack:
+        current, depth = stack.pop()
+        try:
+            entries = list(current.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_dir():
+                if depth < max_depth:
+                    stack.append((entry, depth + 1))
+                continue
+            name_lower = entry.name.lower()
+            if name_lower == "ersc.dll" and dll_path is None:
+                dll_path = entry
+            elif name_lower == "ersc_settings.ini" and ini_path is None:
+                ini_path = entry
+            elif name_lower == "ersc_launcher.exe" and launcher_path is None:
+                launcher_path = entry
+    return dll_path, ini_path, launcher_path
+
+
 class EldenRingChecker(BaseChecker):
     GAME_NAME = "Elden Ring"
     MANIFEST_KEY = "elden_ring"
@@ -1321,7 +1438,164 @@ class EldenRingChecker(BaseChecker):
         results: list[DiagnosticResult] = []
         if self.game_folder and self.game_folder.exists():
             results.append(self._check_regulation_bin())
+            ersc_admin = self._check_ersc_launcher_admin_flag()
+            if ersc_admin:
+                results.append(ersc_admin)
+            results.extend(self._check_seamless_coop())
         return results
+
+    def _check_ersc_launcher_admin_flag(self) -> DiagnosticResult | None:
+        """
+        ersc_launcher.exe is a separate executable from eldenring.exe and
+        carries its own independent run-as-administrator flag. Only checked
+        when the launcher is actually present, and only reported when the
+        flag is set, since a correct setup needs no callout here.
+        """
+        if not _is_windows():
+            return None
+        game_dir = self._game_dir
+        if not game_dir:
+            return None
+        launcher_path = game_dir / "ersc_launcher.exe"
+        if not launcher_path.exists():
+            return None
+        scope = _get_runasadmin_scope(launcher_path)
+        if not scope:
+            return None
+        return DiagnosticResult(
+            name="Run as Administrator Flag",
+            status="error",
+            message=(
+                f"ersc_launcher.exe is set to always run as administrator "
+                f"({scope}). This causes permission issues and is not recommended."
+            ),
+            fix_available=True,
+            fix_action=(
+                "Right-click ersc_launcher.exe > Properties > Compatibility tab\n"
+                "-> Uncheck 'Run this program as an administrator'\n"
+                "If the checkbox is greyed out, the flag is set for all users: "
+                "click 'Change settings for all users' first."
+            ),
+        )
+
+    def _check_seamless_coop(self) -> list[DiagnosticResult]:
+        """
+        Detect a Seamless Co-op install and report only actual problems.
+        No install and
+        a correct install both produce no results.
+        """
+        game_dir = self._game_dir
+        if not game_dir or not game_dir.exists():
+            return []
+
+        expected_dll = game_dir / "SeamlessCoop" / "ersc.dll"
+        expected_ini = game_dir / "SeamlessCoop" / "ersc_settings.ini"
+        expected_launcher = game_dir / "ersc_launcher.exe"
+
+        any_seamless_trace = (
+            expected_dll.exists()
+            or expected_launcher.exists()
+            or (game_dir / "SeamlessCoop").exists()
+            or any(
+                "seamless" in entry.name.lower()
+                for entry in game_dir.iterdir()
+                if entry.is_dir()
+            )
+        )
+        if not any_seamless_trace:
+            return []
+
+        if (
+            expected_dll.exists()
+            and expected_ini.exists()
+            and expected_launcher.exists()
+        ):
+            return self._check_seamless_coop_password(expected_ini)
+
+        found_dll, found_ini, found_launcher = _find_seamless_coop_artifacts(game_dir)
+
+        bullets: list[str] = []
+        if expected_dll.exists():
+            pass
+        elif found_dll:
+            bullets.append(
+                f"ersc.dll found at wrong location: {found_dll.relative_to(game_dir)}"
+            )
+        else:
+            bullets.append("ersc.dll not found anywhere in the game folder")
+
+        if expected_ini.exists():
+            pass
+        elif found_ini:
+            bullets.append(
+                f"ersc_settings.ini found at wrong location: {found_ini.relative_to(game_dir)}"
+            )
+        else:
+            bullets.append("ersc_settings.ini not found anywhere in the game folder")
+
+        if expected_launcher.exists():
+            pass
+        elif found_launcher:
+            bullets.append(
+                f"ersc_launcher.exe found at wrong location: {found_launcher.relative_to(game_dir)}"
+            )
+        else:
+            bullets.append("ersc_launcher.exe not found anywhere in the game folder")
+
+        return [
+            DiagnosticResult(
+                name="Seamless Co-op Installation",
+                status="error",
+                message="Seamless Co-op is not set up correctly:",
+                bullet_items=bullets,
+                fix_available=True,
+                fix_action=(
+                    "The release zip extracts into its own wrapper folder. Open that "
+                    "extracted folder and move only its contents (the SeamlessCoop "
+                    "folder and ersc_launcher.exe) directly into the game folder next "
+                    f"to {self.EXE_NAME}, then delete the now-empty wrapper folder. "
+                    "The result should look like:\n"
+                    f"Game/{self.EXE_NAME}\n"
+                    "Game/ersc_launcher.exe\n"
+                    "Game/SeamlessCoop/ersc.dll\n"
+                    "Game/SeamlessCoop/ersc_settings.ini"
+                ),
+            )
+        ]
+
+    def _check_seamless_coop_password(self, ini_path: Path) -> list[DiagnosticResult]:
+        try:
+            ini_text = ini_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError as e:
+            return [
+                DiagnosticResult(
+                    name="Seamless Co-op Settings",
+                    status="warning",
+                    message=f"Could not read ersc_settings.ini: {e}",
+                )
+            ]
+
+        password_match = re.search(r"(?im)^\s*cooppassword\s*=\s*(.*)$", ini_text)
+        password = password_match.group(1).strip() if password_match else ""
+        if password:
+            return []
+        return [
+            DiagnosticResult(
+                name="Seamless Co-op Password",
+                status="error",
+                message=(
+                    "cooppassword in ersc_settings.ini is empty, the mod will "
+                    "refuse to launch. A common cause on Windows 11: Notepad "
+                    "only caches the file and does not automatically save it "
+                    "when closing."
+                ),
+                fix_available=True,
+                fix_action=(
+                    "Open SeamlessCoop/ersc_settings.ini, set cooppassword to any "
+                    "value, then use File > Save or Ctrl+S and close it"
+                ),
+            )
+        ]
 
 
 class NightReignChecker(BaseChecker):
