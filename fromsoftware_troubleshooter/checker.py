@@ -62,6 +62,21 @@ def _dbg(msg: str) -> None:
         pass
 
 
+# Unconditional marker written on every import, regardless of FST_DEBUG, so
+# a missing fst_debug.log can be told apart from "debug disabled" versus
+# "this checker.py build never ran" versus "TEMP is not writable here".
+try:
+    import datetime
+
+    with open(_DEBUG_LOG_PATH, "a", encoding="utf-8") as _marker_f:
+        _marker_f.write(
+            f"[FST] checker.py loaded at {datetime.datetime.now().isoformat()}, "
+            f"FST_DEBUG={'1' if _DEBUG else '0'}\n"
+        )
+except OSError:
+    pass
+
+
 def _load_manifest() -> dict:
     global _MANIFEST_CACHE
     if _MANIFEST_CACHE is not None:
