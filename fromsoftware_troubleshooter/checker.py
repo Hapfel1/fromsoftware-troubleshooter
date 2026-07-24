@@ -661,9 +661,12 @@ class BaseChecker:
         results.append(check_build_id(self.MANIFEST_KEY))
         results.append(self._check_game_installation())
         if self.game_folder and self.game_folder.exists():
+            _dbg(f"run_all_checks: game_folder OK, EXE_NAME={self.EXE_NAME!r}")
             results.extend(self._check_piracy_indicators())
             results.append(self._check_game_executable())
+            _dbg("run_all_checks: about to call _check_run_as_admin_flag")
             results.append(self._check_run_as_admin_flag())
+            _dbg("run_all_checks: returned from _check_run_as_admin_flag")
         results.extend(self._check_problematic_processes())
         results.extend(self._check_vpn_processes())
         results.append(self._check_steam_running())
@@ -881,6 +884,7 @@ class BaseChecker:
         Check the persistent 'Run as administrator' compatibility flag on the
         game executable.
         """
+        _dbg(f"run_as_admin_flag: called, EXE_NAME={self.EXE_NAME!r}")
         if not _is_windows():
             _dbg("run_as_admin_flag: skipped, not Windows")
             return DiagnosticResult(
