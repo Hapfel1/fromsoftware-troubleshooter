@@ -1,6 +1,6 @@
 [project]
 name = "fromsoftware-troubleshooter"
-version = "1.4.1"
+version = "1.5.0"
 description = "Standalone troubleshooter for FromSoftware games"
 readme = "README.md"
 license = { text = "MIT" }

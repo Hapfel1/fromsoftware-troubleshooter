@@ -867,6 +867,7 @@ class BaseChecker:
         game executable.
         """
         if not _is_windows():
+            _dbg("run_as_admin_flag: skipped, not Windows")
             return DiagnosticResult(
                 name="Run as Administrator Flag",
                 status="info",
@@ -874,12 +875,17 @@ class BaseChecker:
             )
         game_dir = self._game_dir
         if not game_dir or not self.EXE_NAME:
+            _dbg(
+                f"run_as_admin_flag: skipped, game_dir={game_dir!r} "
+                f"EXE_NAME={self.EXE_NAME!r}"
+            )
             return DiagnosticResult(
                 name="Run as Administrator Flag",
                 status="info",
                 message="Game folder not set",
             )
         exe_path = game_dir / self.EXE_NAME
+        _dbg(f"run_as_admin_flag: exe_path={exe_path!r} exists={exe_path.exists()}")
         if not exe_path.exists():
             return DiagnosticResult(
                 name="Run as Administrator Flag",
