@@ -554,6 +554,7 @@ class TroubleshooterApp:
                 "Would you like to locate the game folder manually?",
             ):
                 self._pick_game_folder()
+                return  # _pick_game_folder already triggers _run_checks
 
         self._run_checks()
 
@@ -562,12 +563,28 @@ class TroubleshooterApp:
             title=f"Select {self._game_var.get()} installation folder",
             parent=self.root,
         )
-        if folder:
-            self._game_folder = Path(folder)
-            self._game_folder_label.configure(
-                text=str(self._game_folder), text_color=COLORS["fg"]
-            )
-            self._run_checks()
+        if not folder:
+            return
+        picked = Path(folder)
+        checker_cls = GAME_OPTIONS.get(self._game_var.get(), EldenRingChecker)
+        subfolder = checker_cls.GAME_SUBFOLDER
+        exe_name = checker_cls.EXE_NAME
+        # If the picked folder is already the Game subfolder itself (exe sits
+        # directly inside it) rather than its parent, back up one level so
+        # GAME_SUBFOLDER isn't appended a second time, which would otherwise
+        # look for a nonexistent nested Game/Game path.
+        if (
+            subfolder
+            and exe_name
+            and not (picked / subfolder / exe_name).exists()
+            and (picked / exe_name).exists()
+        ):
+            picked = picked.parent
+        self._game_folder = picked
+        self._game_folder_label.configure(
+            text=str(self._game_folder), text_color=COLORS["fg"]
+        )
+        self._run_checks()
 
     def _show_perm_fix(self) -> None:
         checker_cls = GAME_OPTIONS.get(self._game_var.get(), EldenRingChecker)
