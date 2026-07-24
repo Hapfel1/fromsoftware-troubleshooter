@@ -632,7 +632,9 @@ class BaseChecker:
         if self.game_folder and self.game_folder.exists():
             results.extend(self._check_piracy_indicators())
             results.append(self._check_game_executable())
-            results.append(self._check_run_as_admin_flag())
+            admin_flag = self._check_run_as_admin_flag()
+            if admin_flag:
+                results.append(admin_flag)
         results.extend(self._check_problematic_processes())
         results.extend(self._check_vpn_processes())
         results.append(self._check_steam_running())
@@ -845,17 +847,14 @@ class BaseChecker:
             message=f"{self.EXE_NAME} found - {_format_size(actual_size)} (no reference size available)",
         )
 
-    def _check_run_as_admin_flag(self) -> DiagnosticResult:
+    def _check_run_as_admin_flag(self) -> DiagnosticResult | None:
         """
         Check the persistent 'Run as administrator' compatibility flag on the
-        game executable.
+        game executable. Windows-only concept, so this is hidden entirely on
+        other platforms rather than shown as an info row.
         """
         if not _is_windows():
-            return DiagnosticResult(
-                name="Run as Administrator Flag",
-                status="info",
-                message="Compatibility flag check only available on Windows",
-            )
+            return None
         game_dir = self._game_dir
         if not game_dir or not self.EXE_NAME:
             return DiagnosticResult(
@@ -1022,6 +1021,7 @@ class BaseChecker:
                     f"{tree_prefix}SeamlessCoop/{ini_name}"
                 ),
             )
+
         ]
 
     def _check_seamless_coop_password(self, ini_path: Path) -> list[DiagnosticResult]:

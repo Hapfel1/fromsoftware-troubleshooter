@@ -624,6 +624,8 @@ class TroubleshooterApp:
 
     def _check_worker(self, checker: BaseChecker, q: queue.Queue) -> None:
         def emit(result):
+            if result is None:
+                return
             if isinstance(result, list):
                 for r in result:
                     q.put(r)
