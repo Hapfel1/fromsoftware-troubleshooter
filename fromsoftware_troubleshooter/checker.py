@@ -1021,7 +1021,6 @@ class BaseChecker:
                     f"{tree_prefix}SeamlessCoop/{ini_name}"
                 ),
             )
-
         ]
 
     def _check_seamless_coop_password(self, ini_path: Path) -> list[DiagnosticResult]:
