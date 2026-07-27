@@ -154,16 +154,21 @@ def main() -> int:
         print("Could not resolve any build ids from Steam", file=sys.stderr)
         return 1
 
+    print(f"Checked {len(live_build_ids)}/{len(appids)} games:")
+
     exit_code = 0
+    issues_created = 0
     for game_key, new_build in live_build_ids.items():
         entry = sizes.get(game_key, {})
         old_build = entry.get("build_id")
         if old_build == new_build:
+            print(f"  {game_key}: up to date (build {new_build})")
             continue
 
+        print(f"  {game_key}: update detected (build {old_build} -> {new_build})")
         try:
             if has_open_issue(repo, game_key, new_build):
-                print(f"{game_key}: update already has an open issue, skipping")
+                print("    already has an open issue, skipping")
                 continue
 
             game_name = game_key.replace("_", " ").title()
@@ -171,9 +176,15 @@ def main() -> int:
             if not tracked_files:
                 tracked_files = ["exe", "steam_api64.dll"]
             create_issue(repo, game_key, game_name, old_build, new_build, tracked_files)
+            issues_created += 1
         except requests.HTTPError as e:
-            print(f"{game_key}: GitHub API error: {e}", file=sys.stderr)
+            print(f"    GitHub API error: {e}", file=sys.stderr)
             exit_code = 1
+
+    skipped = len(appids) - len(live_build_ids)
+    if skipped:
+        print(f"  ({skipped} game(s) could not be resolved, see warnings above)")
+    print(f"Done: {issues_created} issue(s) created")
 
     return exit_code
 
