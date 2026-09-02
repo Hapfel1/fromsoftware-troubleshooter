@@ -1,11 +1,11 @@
 {
   "_comment": "Sizes in bytes with 10 byte tolerance for DLL version variations. build_id is Steam build ID at measurement time.",
   "elden_ring": {
-    "build_id": 22984413,
+    "build_id": 23850278,
     "exe": {
-      "exact": 86998096,
-      "min": 86998086,
-      "max": 86998106
+      "exact": 87024720,
+      "min": 87024710,
+      "max": 87024730
     },
     "steam_api64.dll": {
       "exact": 265504,
@@ -13,9 +13,9 @@
       "max": 265514
     },
     "regulation.bin": {
-      "exact": 2036272,
-      "min": 2036262,
-      "max": 2036282
+      "exact": 2045728,
+      "min": 2045718,
+      "max": 2045738
     }
   },
   "nightreign": {
