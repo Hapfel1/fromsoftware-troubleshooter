@@ -19,7 +19,8 @@ For Vanilla and modded game issues.
 - Game executable size
 - steam_api64.dll integrity
 - regulation.bin validity (where applicable)
-- Problematic running processes (Overwolf, RTSS, Process Lasso, etc.)
+- Problematic running processes and services (Overwolf, RTSS, Process Lasso, HidHide, Vanguard, MacTray, FileXplorer, etc.)
+- Problematic Windows scheduled tasks that reference detected processes
 - VPN clients
 - Steam running as administrator
 - Disk space

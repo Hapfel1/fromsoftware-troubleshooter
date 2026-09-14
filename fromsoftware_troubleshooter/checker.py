@@ -279,6 +279,69 @@ def _get_running_process_names() -> set[str]:
     return names
 
 
+def _get_scheduled_problematic_processes() -> list[str]:
+    """Return enabled scheduled tasks whose actions launch known processes."""
+    if not _is_windows():
+        return []
+    try:
+        output = subprocess.check_output(
+            ["schtasks", "/query", "/fo", "LIST", "/v"],
+            text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except Exception:
+        return []
+
+    matches: list[str] = []
+    for task in re.split(r"\r?\n\s*\r?\n", output):
+        state_match = re.search(r"(?im)^\s*Scheduled Task State:\s*(.+)$", task)
+        if state_match and state_match.group(1).strip().lower() == "disabled":
+            continue
+        action_match = re.search(r"(?im)^\s*Task To Run:\s*(.+)$", task)
+        if not action_match:
+            continue
+        action = action_match.group(1).casefold()
+        for process in PROBLEMATIC_PROCESSES:
+            process_pattern = rf"(?<![\w.-]){re.escape(process.casefold())}(?![\w.-])"
+            if re.search(process_pattern, action) and process not in matches:
+                matches.append(process)
+    return matches
+
+
+def _is_hidhide_service_running() -> bool:
+    """Return whether the HidHide kernel service is installed and running."""
+    if not _is_windows():
+        return False
+    try:
+        output = subprocess.check_output(
+            ["sc", "query", "HidHide"],
+            text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except Exception:
+        return False
+    return bool(re.search(r"(?im)^\s*STATE\s*:\s*\d+\s+RUNNING\b", output))
+
+
+def _get_running_windows_services(service_names: tuple[str, ...]) -> list[str]:
+    """Return the requested Windows services that are currently running."""
+    if not _is_windows():
+        return []
+    running: list[str] = []
+    for service_name in service_names:
+        try:
+            output = subprocess.check_output(
+                ["sc", "query", service_name],
+                text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        except Exception:
+            continue
+        if re.search(r"(?im)^\s*STATE\s*:\s*\d+\s+RUNNING\b", output):
+            running.append(service_name)
+    return running
+
+
 def _is_linux() -> bool:
     return platform.system() == "Linux"
 
@@ -512,6 +575,9 @@ PROBLEMATIC_PROCESSES = [
     "MSIAfterburner.exe",
     "SignalRgb.exe",
     "ProcessLasso.exe",
+    "HidHideClient.exe",
+    "MacTray.exe",
+    "FileXplorer.exe",
     # Problematic antiviruses (known to cause crashes, false bans, or performance issues)
     "avira.exe",
     "avgui.exe",
@@ -648,7 +714,62 @@ class BaseChecker:
         results: list[DiagnosticResult] = []
         if _is_windows():
             results.append(self._check_fasoo())
+            hidhide = self._check_hidhide_service()
+            if hidhide:
+                results.append(hidhide)
+            vanguard = _get_running_windows_services(("vgk", "vgc"))
+            if vanguard:
+                results.append(
+                    DiagnosticResult(
+                        name="Riot Vanguard Running",
+                        status="warning",
+                        message=(
+                            "Riot Vanguard is active ("
+                            f"{', '.join(vanguard)}). Its kernel-level anti-cheat "
+                            "can conflict with FromSoftware games."
+                        ),
+                        fix_available=True,
+                        fix_action=(
+                            "Exit Riot Vanguard from the system tray, or uninstall "
+                            "Riot Vanguard temporarily, then restart Windows."
+                        ),
+                    )
+                )
+            rtcore = _get_running_windows_services(("RTCore64",))
+            if rtcore:
+                results.append(
+                    DiagnosticResult(
+                        name="RTCore64 Driver Running",
+                        status="warning",
+                        message=(
+                            "The RTCore64 kernel driver is active, usually from "
+                            "MSI Afterburner or RivaTuner Statistics Server."
+                        ),
+                        fix_available=True,
+                        fix_action=(
+                            "Exit MSI Afterburner and RivaTuner Statistics Server "
+                            "before launching the game."
+                        ),
+                    )
+                )
         return results
+
+    def _check_hidhide_service(self) -> DiagnosticResult | None:
+        if not _is_hidhide_service_running():
+            return None
+        return DiagnosticResult(
+            name="HidHide Service Running",
+            status="warning",
+            message=(
+                "HidHide's kernel service is running. Its device filtering can "
+                "interfere with controller detection in FromSoftware games."
+            ),
+            fix_available=True,
+            fix_action=(
+                "Open HidHide Configuration Client, disable device hiding, "
+                "then restart the game."
+            ),
+        )
 
     def _check_fasoo(self) -> DiagnosticResult:
         """
@@ -1206,18 +1327,7 @@ class BaseChecker:
             in {n.replace(".exe", "") for n in running_names}
         ]
 
-        process_lasso_scheduled = False
-        if _is_windows():
-            try:
-                schtasks = subprocess.check_output(
-                    ["schtasks", "/query", "/fo", "LIST", "/v"],
-                    text=True,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
-                )
-                if "processlasso" in schtasks.lower():
-                    process_lasso_scheduled = True
-            except Exception:
-                pass
+        scheduled_problematic = _get_scheduled_problematic_processes()
 
         results: list[DiagnosticResult] = []
 
@@ -1238,6 +1348,9 @@ class BaseChecker:
                 )
             )
 
+        process_lasso_scheduled = any(
+            "processlasso" in process.lower() for process in scheduled_problematic
+        )
         if any("processlasso" in p.lower() for p in running) or process_lasso_scheduled:
             results.append(
                 DiagnosticResult(
@@ -1246,6 +1359,23 @@ class BaseChecker:
                     message="Process Lasso can cause flashbang crashes on launch.",
                     fix_available=True,
                     fix_action="1. Close Process Lasso if running\n2. Disable in Task Manager > Startup tab\n3. Remove from Task Scheduler > Task Scheduler Library",
+                )
+            )
+
+        other_scheduled = [
+            process
+            for process in scheduled_problematic
+            if "processlasso" not in process.lower()
+        ]
+        if other_scheduled:
+            results.append(
+                DiagnosticResult(
+                    name="Problematic Scheduled Tasks Detected",
+                    status="warning",
+                    message="These scheduled tasks reference processes that can cause crashes or connection issues:",
+                    bullet_items=other_scheduled,
+                    fix_available=True,
+                    fix_action="Review or disable the matching entries in Task Scheduler > Task Scheduler Library before playing.",
                 )
             )
 
@@ -1281,7 +1411,7 @@ class BaseChecker:
                 )
             )
 
-        if not running and not process_lasso_scheduled:
+        if not running and not scheduled_problematic:
             results.append(
                 DiagnosticResult(
                     name="Process Check",
@@ -1611,7 +1741,7 @@ class EldenRingChecker(BaseChecker):
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
-        results: list[DiagnosticResult] = []
+        results = super()._check_extra()
         if self.game_folder and self.game_folder.exists():
             results.append(self._check_regulation_bin())
             coop_admin = self._check_seamless_coop_launcher_admin_flag()
@@ -1640,7 +1770,7 @@ class NightReignChecker(BaseChecker):
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
-        results: list[DiagnosticResult] = []
+        results = super()._check_extra()
         if self.game_folder and self.game_folder.exists():
             results.append(self._check_regulation_bin())
             coop_admin = self._check_seamless_coop_launcher_admin_flag()
@@ -1757,7 +1887,7 @@ class ArmoredCore6Checker(BaseChecker):
     ]
 
     def _check_extra(self) -> list[DiagnosticResult]:
-        results: list[DiagnosticResult] = []
+        results = super()._check_extra()
         if self.game_folder and self.game_folder.exists():
             results.append(self._check_regulation_bin())
         return results
