@@ -249,7 +249,10 @@ def _get_runasadmin_scope(exe_path: Path) -> str | None:
                         break
                     index += 1
                     normalized_name = os.path.normcase(os.path.normpath(name))
-                    if normalized_name in exe_paths and "RUNASADMIN" in str(value).upper().split():
+                    if (
+                        normalized_name in exe_paths
+                        and "RUNASADMIN" in str(value).upper().split()
+                    ):
                         return scope_label
             finally:
                 winreg.CloseKey(key)
