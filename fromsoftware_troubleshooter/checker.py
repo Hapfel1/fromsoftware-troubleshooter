@@ -621,8 +621,6 @@ INFORMATIONAL_PROCESSES = [
     "GameBarFTServer.exe",
     "EpicGamesLauncher.exe",
     "GalaxyClient.exe",
-    "Vesktop.exe",
-    "Armcord.exe",
 ]
 
 VPN_PROCESSES = [
