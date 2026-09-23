@@ -219,29 +219,40 @@ def _get_runasadmin_scope(exe_path: Path) -> str | None:
     """
     import winreg
 
-    exe_str = str(exe_path.resolve()).lower()
+    exe_paths = {
+        os.path.normcase(os.path.normpath(str(exe_path))),
+        os.path.normcase(os.path.normpath(str(exe_path.resolve()))),
+    }
     layers_path = r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers"
     hives = [
         (winreg.HKEY_CURRENT_USER, "current user"),
         (winreg.HKEY_LOCAL_MACHINE, "all users"),
     ]
+    views = [0]
+    for view_name in ("KEY_WOW64_64KEY", "KEY_WOW64_32KEY"):
+        view = getattr(winreg, view_name, 0)
+        if view not in views:
+            views.append(view)
+
     for hive, scope_label in hives:
-        try:
-            key = winreg.OpenKey(hive, layers_path)
-        except OSError:
-            continue
-        try:
-            index = 0
-            while True:
-                try:
-                    name, value, _ = winreg.EnumValue(key, index)
-                except OSError:
-                    break
-                index += 1
-                if name.lower() == exe_str and "RUNASADMIN" in value.upper().split():
-                    return scope_label
-        finally:
-            winreg.CloseKey(key)
+        for view in views:
+            try:
+                key = winreg.OpenKey(hive, layers_path, 0, winreg.KEY_READ | view)
+            except OSError:
+                continue
+            try:
+                index = 0
+                while True:
+                    try:
+                        name, value, _ = winreg.EnumValue(key, index)
+                    except OSError:
+                        break
+                    index += 1
+                    normalized_name = os.path.normcase(os.path.normpath(name))
+                    if normalized_name in exe_paths and "RUNASADMIN" in str(value).upper().split():
+                        return scope_label
+            finally:
+                winreg.CloseKey(key)
     return None
 
 
@@ -600,7 +611,6 @@ PROBLEMATIC_PROCESSES = [
 # Low confidence - unlikely to cause issues but worth knowing
 INFORMATIONAL_PROCESSES = [
     # Windows
-    "Discord.exe",
     "Overwolf.exe",
     "Medal.exe",
     "GeForceExperience.exe",
@@ -818,6 +828,7 @@ class BaseChecker:
             try:
                 k32 = ctypes.windll.kernel32
                 psapi = ctypes.windll.psapi
+                wintypes = ctypes.wintypes
 
                 # Find the game PID by iterating snapshot of processes
                 TH32CS_SNAPPROCESS = 0x00000002
@@ -835,6 +846,44 @@ class BaseChecker:
                         ("dwFlags", ctypes.c_ulong),
                         ("szExeFile", ctypes.c_char * 260),
                     ]
+
+                k32.CreateToolhelp32Snapshot.argtypes = [
+                    wintypes.DWORD,
+                    wintypes.DWORD,
+                ]
+                k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+                k32.Process32First.argtypes = [
+                    wintypes.HANDLE,
+                    ctypes.POINTER(PROCESSENTRY32),
+                ]
+                k32.Process32First.restype = wintypes.BOOL
+                k32.Process32Next.argtypes = [
+                    wintypes.HANDLE,
+                    ctypes.POINTER(PROCESSENTRY32),
+                ]
+                k32.Process32Next.restype = wintypes.BOOL
+                k32.CloseHandle.argtypes = [wintypes.HANDLE]
+                k32.CloseHandle.restype = wintypes.BOOL
+                k32.OpenProcess.argtypes = [
+                    wintypes.DWORD,
+                    wintypes.BOOL,
+                    wintypes.DWORD,
+                ]
+                k32.OpenProcess.restype = wintypes.HANDLE
+                psapi.EnumProcessModules.argtypes = [
+                    wintypes.HANDLE,
+                    ctypes.POINTER(wintypes.HMODULE),
+                    wintypes.DWORD,
+                    ctypes.POINTER(wintypes.DWORD),
+                ]
+                psapi.EnumProcessModules.restype = wintypes.BOOL
+                psapi.GetModuleBaseNameW.argtypes = [
+                    wintypes.HANDLE,
+                    wintypes.HMODULE,
+                    wintypes.LPWSTR,
+                    wintypes.DWORD,
+                ]
+                psapi.GetModuleBaseNameW.restype = wintypes.DWORD
 
                 snapshot = k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
                 if snapshot == ctypes.c_void_p(-1).value:
@@ -868,7 +917,7 @@ class BaseChecker:
                             cbNeeded = ctypes.c_ulong()
                             if psapi.EnumProcessModules(
                                 hProcess,
-                                ctypes.byref(hMods),
+                                hMods,
                                 ctypes.sizeof(hMods),
                                 ctypes.byref(cbNeeded),
                             ):
@@ -1389,28 +1438,6 @@ class BaseChecker:
                 )
             )
 
-        discord_running = any(
-            n.replace(".exe", "").lower() == "discord" for n in running_names
-        )
-        if discord_running:
-            results.append(
-                DiagnosticResult(
-                    name="Discord Clip Feature Warning",
-                    status="warning",
-                    message=(
-                        "Discord is running. If you have an active Nitro subscription, "
-                        "Discord's clip feature may be enabled and can interfere with "
-                        "game launching, causing crashes or hangs on startup."
-                    ),
-                    fix_available=True,
-                    fix_action=(
-                        "If you have Nitro, disable clips: "
-                        "User Settings > Voice & Video > Clips "
-                        "and turn off 'Enable Clips'."
-                    ),
-                )
-            )
-
         if not running and not scheduled_problematic:
             results.append(
                 DiagnosticResult(
@@ -1821,6 +1848,7 @@ class DarkSouls2Checker(BaseChecker):
         "steam_api64.rne",
         "steam_emu.ini",
         "winmm.dll",
+        "dinput8.dll",
     ]
 
 

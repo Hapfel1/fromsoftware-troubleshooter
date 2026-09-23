@@ -826,7 +826,6 @@ class TroubleshooterApp:
                 r.name == "Steam Elevation Check"
                 and "only available on Windows" in r.message
             )
-            and r.name != "Discord Clip Feature Warning"
         ]
         if not relevant:
             # All green, nothing to copy
