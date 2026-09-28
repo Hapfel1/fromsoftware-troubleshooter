@@ -765,6 +765,105 @@ class BaseChecker:
                 )
         return results
 
+    def _check_firewall_block(self) -> DiagnosticResult | None:
+        """Check for enabled Windows Firewall block rules for this game's exe."""
+        if not _is_windows():
+            return None
+
+        game_dir = self._game_dir
+        if not game_dir or not self.EXE_NAME:
+            return DiagnosticResult(
+                name="Firewall Rule Check",
+                status="info",
+                message="Game folder not set - cannot check firewall rules",
+            )
+
+        exe_path = game_dir / self.EXE_NAME
+        if not exe_path.exists():
+            return DiagnosticResult(
+                name="Firewall Rule Check",
+                status="info",
+                message=f"{self.EXE_NAME} not found - cannot check firewall rules",
+            )
+
+        ps_script = r'''
+$program = $env:FST_GAME_EXE
+$matches = @(
+    Get-NetFirewallRule -Enabled True -Action Block -ErrorAction Stop |
+        ForEach-Object {
+            $rule = $_
+            $rule | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue |
+                Where-Object { $_.Program -and $_.Program -ieq $program } |
+                ForEach-Object {
+                    [PSCustomObject]@{
+                        Name = $rule.DisplayName
+                        Direction = [string]$rule.Direction
+                        Program = $_.Program
+                    }
+                }
+        }
+)
+if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
+'''
+        env = os.environ.copy()
+        env["FST_GAME_EXE"] = str(exe_path)
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_script],
+                capture_output=True,
+                text=True,
+                env=env,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                timeout=5,
+            )
+            if result.returncode != 0:
+                return DiagnosticResult(
+                    name="Firewall Rule Check",
+                    status="warning",
+                    message="Could not query Windows Firewall rules",
+                )
+            raw = result.stdout.strip()
+            rules = json.loads(raw) if raw else []
+            if isinstance(rules, dict):
+                rules = [rules]
+            bullets = [
+                f"{rule.get('Name', 'Unnamed rule')} ({rule.get('Direction', 'Unknown').lower()})"
+                for rule in rules
+            ]
+            if bullets:
+                return DiagnosticResult(
+                    name="Game Firewall Block Rule Detected",
+                    status="warning",
+                    message=(
+                        f"Enabled Windows Firewall block rules target {self.EXE_NAME}. "
+                        "They can force the game offline and prevent multiplayer connectivity."
+                    ),
+                    bullet_items=bullets,
+                    fix_available=True,
+                    fix_action=(
+                        "Open Windows Defender Firewall with Advanced Security, "
+                        "find the listed inbound or outbound block rules, and disable "
+                        "or remove them. Then restart the game."
+                    ),
+                )
+            return DiagnosticResult(
+                name="Firewall Rule Check",
+                status="ok",
+                message=f"No enabled Windows Firewall block rules target {self.EXE_NAME}",
+            )
+        except subprocess.TimeoutExpired:
+            return DiagnosticResult(
+                name="Firewall Rule Check",
+                status="warning",
+                message="Windows Firewall rule check timed out",
+            )
+        except (OSError, json.JSONDecodeError) as e:
+            return DiagnosticResult(
+                name="Firewall Rule Check",
+                status="warning",
+                message=f"Could not query Windows Firewall rules: {e}",
+            )
+
     def _check_hidhide_service(self) -> DiagnosticResult | None:
         if not _is_hidhide_service_running():
             return None
@@ -1851,6 +1950,13 @@ class DarkSouls2Checker(BaseChecker):
         "winmm.dll",
         "dinput8.dll",
     ]
+
+    def _check_extra(self) -> list[DiagnosticResult]:
+        results = super()._check_extra()
+        firewall = self._check_firewall_block()
+        if firewall:
+            results.append(firewall)
+        return results
 
 
 class DarkSouls3Checker(BaseChecker):

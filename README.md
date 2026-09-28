@@ -21,6 +21,7 @@ For Vanilla and modded game issues.
 - regulation.bin validity (where applicable)
 - Problematic running processes and services (Overwolf, RTSS, Process Lasso, HidHide, Vanguard, MacTray, FileXplorer, etc.)
 - Problematic Windows scheduled tasks that reference detected processes
+- Dark Souls II-specific Windows Firewall block rules that can force offline mode
 - VPN clients
 - Steam running as administrator
 - Disk space

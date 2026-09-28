@@ -852,16 +852,25 @@ class TroubleshooterApp:
 
         text = "\n".join(lines)
         try:
-            pyperclip.copy(text)
+            try:
+                # Pyperclip preserves clipboard contents after the app exits on
+                # Linux/Wayland and Windows, when its system backend is available.
+                pyperclip.copy(text)
+            except Exception:
+                # Tk is already running for the app and provides a useful fallback
+                # when xclip/wl-clipboard is missing or the Windows clipboard is busy.
+                self.root.clipboard_clear()
+                self.root.clipboard_append(text)
+                self.root.update()
             # Flash button to show success
             orig = self._copy_btn.cget("text")
             self._copy_btn.configure(text="✓ Copied!")
             self.root.after(1500, lambda: self._copy_btn.configure(text=orig))
         except Exception:
-            # Fallback if pyperclip fails
-            self._copy_btn.configure(text="Copy failed")
+            # Both clipboard backends can be unavailable in headless or locked sessions.
+            self._copy_btn.configure(text="Copy failed - retry")
             self.root.after(
-                1500, lambda: self._copy_btn.configure(text="Copy to Clipboard")
+                2500, lambda: self._copy_btn.configure(text="Copy to Clipboard")
             )
 
     def run(self) -> None:
