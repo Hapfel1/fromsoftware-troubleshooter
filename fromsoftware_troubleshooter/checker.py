@@ -789,18 +789,15 @@ class BaseChecker:
         ps_script = r'''
 $program = $env:FST_GAME_EXE
 $matches = @(
-    Get-NetFirewallRule -Enabled True -Action Block -ErrorAction Stop |
+    Get-NetFirewallApplicationFilter -Program $program -ErrorAction Stop |
+        Get-NetFirewallRule -AssociatedNetFirewallApplicationFilter -ErrorAction Stop |
+        Where-Object { $_.Enabled -eq 'True' -and $_.Action -eq 'Block' } |
         ForEach-Object {
-            $rule = $_
-            $rule | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue |
-                Where-Object { $_.Program -and $_.Program -ieq $program } |
-                ForEach-Object {
-                    [PSCustomObject]@{
-                        Name = $rule.DisplayName
-                        Direction = [string]$rule.Direction
-                        Program = $_.Program
-                    }
-                }
+            [PSCustomObject]@{
+                Name = $_.DisplayName
+                Direction = [string]$_.Direction
+                Program = $program
+            }
         }
 )
 if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
@@ -854,13 +851,13 @@ if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
         except subprocess.TimeoutExpired:
             return DiagnosticResult(
                 name="Firewall Rule Check",
-                status="warning",
-                message="Windows Firewall rule check timed out",
+                status="info",
+                message="Windows Firewall rule check timed out; no result available",
             )
         except (OSError, json.JSONDecodeError) as e:
             return DiagnosticResult(
                 name="Firewall Rule Check",
-                status="warning",
+                status="info",
                 message=f"Could not query Windows Firewall rules: {e}",
             )
 
