@@ -766,7 +766,7 @@ class BaseChecker:
         return results
 
     def _check_firewall_block(self) -> DiagnosticResult | None:
-        """Check for enabled Windows Firewall block rules for this game's exe."""
+        """Check for enabled Windows Firewall block rules for the game's executables."""
         if not _is_windows():
             return None
 
@@ -778,40 +778,61 @@ class BaseChecker:
                 message="Game folder not set - cannot check firewall rules",
             )
 
+        executable_paths: list[Path] = []
         exe_path = game_dir / self.EXE_NAME
-        if not exe_path.exists():
+        if exe_path.exists():
+            executable_paths.append(exe_path)
+        if self.SEAMLESS_COOP_PREFIX:
+            launcher_path = _find_seamless_coop_artifacts(
+                game_dir, self.SEAMLESS_COOP_PREFIX
+            )[2]
+            if launcher_path:
+                executable_paths.append(launcher_path)
+        if not executable_paths:
             return DiagnosticResult(
                 name="Firewall Rule Check",
                 status="info",
                 message=f"{self.EXE_NAME} not found - cannot check firewall rules",
             )
 
-        ps_script = r'''
-$program = $env:FST_GAME_EXE
+        ps_script = r"""
+$programs = $env:FST_FIREWALL_PROGRAMS -split "`n" |
+    Where-Object { $_ } |
+    ForEach-Object {
+        [Environment]::ExpandEnvironmentVariables($_).Trim().Trim('"').Replace('/', '\')
+    }
+$programs = @($programs | ForEach-Object { $_.ToLowerInvariant() })
 $matches = @(
-    Get-NetFirewallApplicationFilter -Program $program -ErrorAction Stop |
-        Get-NetFirewallRule -AssociatedNetFirewallApplicationFilter -ErrorAction Stop |
-        Where-Object { $_.Enabled -eq 'True' -and $_.Action -eq 'Block' } |
+    Get-NetFirewallRule -Enabled True -Action Block -ErrorAction Stop |
         ForEach-Object {
-            [PSCustomObject]@{
-                Name = $_.DisplayName
-                Direction = [string]$_.Direction
-                Program = $program
+            $rule = $_
+            Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule |
+                ForEach-Object {
+                    $program = ([Environment]::ExpandEnvironmentVariables(
+                        [string]$_.Program
+                    )).Trim().Trim('"').Replace('/', '\').ToLowerInvariant()
+                    if ($programs -contains $program) {
+                        [PSCustomObject]@{
+                            Name = $rule.DisplayName
+                            Direction = [string]$rule.Direction
+                            Program = $program
+                        }
+                    }
+                }
             }
-        }
 )
 if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
-'''
+"""
         env = os.environ.copy()
-        env["FST_GAME_EXE"] = str(exe_path)
+        env["FST_FIREWALL_PROGRAMS"] = "\n".join(str(path) for path in executable_paths)
         try:
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_script],
                 capture_output=True,
                 text=True,
                 env=env,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                timeout=5,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                timeout=10,
             )
             if result.returncode != 0:
                 return DiagnosticResult(
@@ -828,11 +849,12 @@ if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
                 for rule in rules
             ]
             if bullets:
+                executable_names = ", ".join(path.name for path in executable_paths)
                 return DiagnosticResult(
                     name="Game Firewall Block Rule Detected",
                     status="warning",
                     message=(
-                        f"Enabled Windows Firewall block rules target {self.EXE_NAME}. "
+                        f"Enabled Windows Firewall block rules target {executable_names}. "
                         "They can force the game offline and prevent multiplayer connectivity."
                     ),
                     bullet_items=bullets,
@@ -846,7 +868,10 @@ if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
             return DiagnosticResult(
                 name="Firewall Rule Check",
                 status="ok",
-                message=f"No enabled Windows Firewall block rules target {self.EXE_NAME}",
+                message=(
+                    "No enabled Windows Firewall block rules target "
+                    f"{', '.join(path.name for path in executable_paths)}"
+                ),
             )
         except subprocess.TimeoutExpired:
             return DiagnosticResult(
@@ -1937,6 +1962,7 @@ class DarkSouls2Checker(BaseChecker):
     EXE_NAME = "DarkSoulsII.exe"
     SAVE_FILE_NAME = "DS2SOFS0000.sl2"
     GAME_SUBFOLDER = "Game"
+    SEAMLESS_COOP_PREFIX = "ds2sc"
     PIRACY_FOLDERS = ["_CommonRedist"]
     PIRACY_FILES = [
         "dlllist.txt",
