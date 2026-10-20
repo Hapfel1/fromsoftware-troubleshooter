@@ -1,11 +1,11 @@
 {
   "_comment": "Sizes in bytes with 10 byte tolerance for DLL version variations. build_id is Steam build ID at measurement time.",
   "elden_ring": {
-    "build_id": 25080141,
+    "build_id": 25827938,
     "exe": {
-      "exact": 87042128,
-      "min": 87042118,
-      "max": 87042138
+      "exact": 86973008,
+      "min": 86972998,
+      "max": 86973018
     },
     "steam_api64.dll": {
       "exact": 265504,
