@@ -6,6 +6,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import ssl
 import subprocess
 import urllib.request
@@ -395,8 +396,11 @@ def _get_steam_library_folders() -> list[Path]:
                 Path(f"{drive}:/Program Files (x86)/Steam/steamapps"),
                 Path(f"{drive}:/Steam/steamapps"),
             ):
-                if stem.exists():
-                    libraries.append(stem)
+                try:
+                    if stem.exists():
+                        libraries.append(stem)
+                except OSError:
+                    pass
 
     elif _is_linux():
         for candidate in (
@@ -573,6 +577,50 @@ def find_save_file(manifest_key: str) -> Path | None:
 def autoscan(manifest_key: str) -> tuple[Path | None, Path | None]:
     """Return (game_folder, save_file_path) for the given game."""
     return find_game_folder(manifest_key), find_save_file(manifest_key)
+
+
+def get_linux_launch_options(
+    manifest_key: str, game_folder: Path | None
+) -> str | None:
+    """Build Steam Linux launch options for the detected game's library."""
+    app_id = _APP_IDS.get(manifest_key)
+    if not app_id or not game_folder:
+        return None
+
+    try:
+        game_folder = game_folder.resolve()
+    except OSError:
+        pass
+
+    library_path: Path | None = None
+    for steamapps in _get_steam_library_folders():
+        try:
+            game_folder.relative_to(steamapps / "common")
+        except ValueError:
+            continue
+        library_path = steamapps
+        break
+
+    if library_path is None:
+        candidate = game_folder.parent.parent
+        if candidate.name == "steamapps":
+            library_path = candidate
+    if library_path is None:
+        return None
+
+    try:
+        relative_to_home = library_path.relative_to(Path.home())
+    except ValueError:
+        library_value = shlex.quote(f"{library_path}/")
+    else:
+        library_value = f"$HOME/{relative_to_home}/"
+
+    return (
+        f"STEAM_COMPAT_LIBRARY_PATHS={library_value} "
+        f"STEAM_COMPAT_DATA_PATH=$STEAM_COMPAT_LIBRARY_PATHS/compatdata/{app_id}/ "
+        f"SteamAppId={app_id} SteamGameId={app_id} "
+        f"SteamOverlayGameId={app_id} %command%"
+    )
 
 
 # ---------------------------------------------------------------------------

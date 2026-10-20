@@ -35,6 +35,9 @@ File size ranges are fetched from GitHub and fall back to the bundled
 Download the latest Release and choose either Linux or Windows, unpack it and run it.
 Select the game you want to troubleshoot.
 
+On Linux, once a Steam game is detected, use **Copy Linux Launch Options** to copy
+the Seamless Co-op launch options for that game's Steam library and AppID.
+
 ## Building from Source
 
 See [DEVELOPMENT.md](DEVELOPMENT.md).

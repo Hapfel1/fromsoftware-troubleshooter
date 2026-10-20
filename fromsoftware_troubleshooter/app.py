@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import platform
 import queue
 import threading
 import tkinter as tk
@@ -23,6 +25,7 @@ from fromsoftware_troubleshooter.checker import (
     SekiroChecker,
     autoscan,
     check_build_id,
+    get_linux_launch_options,
 )
 
 # ---------------------------------------------------------------------------
@@ -361,6 +364,7 @@ class TroubleshooterApp:
 
         self._game_var = ctk.StringVar()
         self._game_folder: Path | None = None
+        self._linux_launch_options_btn: ctk.CTkButton | None = None
         self._check_thread: threading.Thread | None = None
         self._result_queue: queue.Queue = queue.Queue()
 
@@ -443,9 +447,6 @@ class TroubleshooterApp:
             text_color=COLORS["fg"],
         ).pack(side="left", padx=(0, 10))
 
-        # Fix Permissions button (Windows only)
-        import os
-
         if os.name == "nt":
             ctk.CTkButton(
                 folder_row,
@@ -456,6 +457,18 @@ class TroubleshooterApp:
                 hover_color=COLORS["accent"],
                 text_color=COLORS["fg"],
             ).pack(side="left", padx=(0, 10))
+        elif platform.system() == "Linux":
+            self._linux_launch_options_btn = ctk.CTkButton(
+                folder_row,
+                text="Copy Linux Launch Options",
+                command=self._copy_linux_launch_options,
+                width=190,
+                fg_color=COLORS["surface"],
+                hover_color=COLORS["accent"],
+                text_color=COLORS["fg"],
+                state="disabled",
+            )
+            self._linux_launch_options_btn.pack(side="left", padx=(0, 10))
 
         self._game_folder_label = ctk.CTkLabel(
             folder_row,
@@ -556,6 +569,7 @@ class TroubleshooterApp:
                 self._pick_game_folder()
                 return  # _pick_game_folder already triggers _run_checks
 
+        self._update_linux_launch_options_button()
         self._run_checks()
 
     def _pick_game_folder(self) -> None:
@@ -584,7 +598,37 @@ class TroubleshooterApp:
         self._game_folder_label.configure(
             text=str(self._game_folder), text_color=COLORS["fg"]
         )
+        self._update_linux_launch_options_button()
         self._run_checks()
+
+    def _update_linux_launch_options_button(self) -> None:
+        if self._linux_launch_options_btn is None:
+            return
+        manifest_key = GAME_MANIFEST_KEYS.get(self._game_var.get())
+        options = get_linux_launch_options(manifest_key or "", self._game_folder)
+        self._linux_launch_options_btn.configure(
+            state="normal" if options else "disabled"
+        )
+
+    def _copy_linux_launch_options(self) -> None:
+        manifest_key = GAME_MANIFEST_KEYS.get(self._game_var.get())
+        options = get_linux_launch_options(manifest_key or "", self._game_folder)
+        if not options or self._linux_launch_options_btn is None:
+            return
+        try:
+            pyperclip.copy(options)
+        except Exception:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(options)
+            self.root.update()
+        self._linux_launch_options_btn.configure(text="Copied!")
+        self.root.after(
+            1500,
+            lambda: self._linux_launch_options_btn
+            and self._linux_launch_options_btn.configure(
+                text="Copy Linux Launch Options"
+            ),
+        )
 
     def _show_perm_fix(self) -> None:
         checker_cls = GAME_OPTIONS.get(self._game_var.get(), EldenRingChecker)
