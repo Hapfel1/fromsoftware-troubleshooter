@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import platform
 import queue
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -13,6 +14,7 @@ from tkinter import filedialog
 import customtkinter as ctk
 import pyperclip
 
+from fromsoftware_troubleshooter import __version__
 from fromsoftware_troubleshooter.checker import (
     ArmoredCore6Checker,
     BaseChecker,
@@ -23,9 +25,11 @@ from fromsoftware_troubleshooter.checker import (
     EldenRingChecker,
     NightReignChecker,
     SekiroChecker,
-    autoscan,
-    check_build_id,
+    clear_caches,
+    find_game_folder,
     get_linux_launch_options,
+    permission_fix_commands,
+    run_check,
 )
 
 # ---------------------------------------------------------------------------
@@ -75,82 +79,18 @@ GAME_MANIFEST_KEYS: dict[str, str] = {
     "Armored Core VI: Fires of Rubicon": "armored_core_6",
 }
 
+# Order in which installed games are looked for at startup.
+DEFAULT_GAME_ORDER = [
+    "Elden Ring",
+    "Elden Ring Nightreign",
+    "Dark Souls III",
+    "Dark Souls Remastered",
+    "Dark Souls II: Scholar of the First Sin",
+    "Sekiro: Shadows Die Twice",
+    "Armored Core VI: Fires of Rubicon",
+]
+
 _SENTINEL = object()
-
-
-# ---------------------------------------------------------------------------
-# Themed yes/no dialog (replaces tkinter.messagebox)
-# ---------------------------------------------------------------------------
-
-
-def _ask_yes_no(parent: ctk.CTk, title: str, message: str) -> bool:
-    result: dict[str, bool] = {}
-
-    dialog = ctk.CTkToplevel(parent)
-    dialog.title(title)
-    dialog.resizable(False, False)
-    dialog.configure(fg_color=COLORS["bg"])
-    dialog.lift()
-    dialog.attributes("-topmost", True)
-
-    w, h = 420, 130
-    parent.update_idletasks()
-    px = parent.winfo_rootx() + (parent.winfo_width() // 2) - (w // 2)
-    py = parent.winfo_rooty() + (parent.winfo_height() // 2) - (h // 2)
-    dialog.geometry(f"{w}x{h}+{px}+{py}")
-    dialog.after(50, dialog.grab_set)
-
-    inner = ctk.CTkFrame(dialog, fg_color="transparent")
-    inner.pack(fill="both", expand=True, padx=20, pady=(16, 14))
-
-    ctk.CTkLabel(
-        inner,
-        text=message,
-        font=("Segoe UI", 12),
-        wraplength=370,
-        justify="left",
-        text_color=COLORS["fg"],
-    ).pack(anchor="w")
-
-    btn_row = ctk.CTkFrame(inner, fg_color="transparent")
-    btn_row.pack(anchor="w", pady=(14, 0))
-
-    def _yes():
-        result["v"] = True
-        dialog.destroy()
-
-    def _no():
-        result["v"] = False
-        dialog.destroy()
-
-    ctk.CTkButton(
-        btn_row,
-        text="Yes",
-        width=90,
-        height=30,
-        command=_yes,
-        fg_color=COLORS["accent"],
-        hover_color=COLORS["accent_hover"],
-        text_color="#1e1e2e",
-        font=("Segoe UI", 12, "bold"),
-        corner_radius=6,
-    ).pack(side="left", padx=(0, 8))
-
-    ctk.CTkButton(
-        btn_row,
-        text="No",
-        width=90,
-        height=30,
-        command=_no,
-        fg_color=COLORS["surface"],
-        hover_color=COLORS["surface_alt"],
-        text_color=COLORS["fg"],
-        font=("Segoe UI", 12),
-        corner_radius=6,
-    ).pack(side="left")
-
-    dialog.wait_window()
-    return result.get("v", False)
 
 
 # ---------------------------------------------------------------------------
@@ -159,10 +99,8 @@ def _ask_yes_no(parent: ctk.CTk, title: str, message: str) -> bool:
 
 
 def _show_permission_fix(
-    parent: ctk.CTk, game_folder: Path | None, game_exe: str
+    parent: ctk.CTk, game_folder: Path | None, game_exe: str, manifest_key: str
 ) -> None:
-    import os
-
     dialog = ctk.CTkToplevel(parent)
     dialog.title("Fix Steam Permissions")
     dialog.resizable(False, False)
@@ -181,15 +119,6 @@ def _show_permission_fix(
         dialog, fg_color=COLORS["bg"], scrollbar_button_color=COLORS["surface"]
     )
     inner.pack(fill="both", expand=True, padx=20, pady=20)
-
-    appdata_path = (
-        Path(os.environ.get("APPDATA", "")) if os.name == "nt" else Path.home()
-    )
-    username = (
-        os.environ.get("USERNAME", "YourUsername")
-        if os.name == "nt"
-        else os.environ.get("USER", "youruser")
-    )
 
     ctk.CTkLabel(
         inner,
@@ -223,8 +152,8 @@ def _show_permission_fix(
             anchor="w",
         ).pack(anchor="w", pady=2)
 
-    if game_folder:
-        cmd1 = ctk.CTkTextbox(
+    for command in permission_fix_commands(game_folder, manifest_key):
+        box = ctk.CTkTextbox(
             inner,
             height=28,
             font=("Consolas", 10),
@@ -232,46 +161,9 @@ def _show_permission_fix(
             fg_color=COLORS["surface"],
             text_color=COLORS["fg"],
         )
-        cmd1.pack(fill="x", pady=(8, 2))
-        cmd1.insert("1.0", f'takeown /F "{game_folder}" /R /D Y')
-        cmd1.configure(state="disabled")
-
-        cmd2 = ctk.CTkTextbox(
-            inner,
-            height=28,
-            font=("Consolas", 10),
-            wrap="none",
-            fg_color=COLORS["surface"],
-            text_color=COLORS["fg"],
-        )
-        cmd2.pack(fill="x", pady=2)
-        cmd2.insert("1.0", f'icacls "{game_folder}" /grant {username}:F /T')
-        cmd2.configure(state="disabled")
-
-        if os.name == "nt":
-            cmd3 = ctk.CTkTextbox(
-                inner,
-                height=28,
-                font=("Consolas", 10),
-                wrap="none",
-                fg_color=COLORS["surface"],
-                text_color=COLORS["fg"],
-            )
-            cmd3.pack(fill="x", pady=(8, 2))
-            cmd3.insert("1.0", f'takeown /F "{appdata_path}" /R /D Y')
-            cmd3.configure(state="disabled")
-
-            cmd4 = ctk.CTkTextbox(
-                inner,
-                height=28,
-                font=("Consolas", 10),
-                wrap="none",
-                fg_color=COLORS["surface"],
-                text_color=COLORS["fg"],
-            )
-            cmd4.pack(fill="x", pady=2)
-            cmd4.insert("1.0", f'icacls "{appdata_path}" /grant {username}:F /T')
-            cmd4.configure(state="disabled")
+        box.pack(fill="x", pady=2)
+        box.insert("1.0", command)
+        box.configure(state="disabled")
 
     ctk.CTkLabel(
         inner,
@@ -346,15 +238,16 @@ class TroubleshooterApp:
         ctk.set_default_color_theme("blue")
 
         self.root = ctk.CTk()
-        self.root.title("FromSoftware Troubleshooter")
+        self.root.title(f"FromSoftware Troubleshooter {__version__}")
         self.root.geometry("740x660")
         self.root.resizable(True, True)
         self.root.configure(fg_color=COLORS["bg"])
 
         # Set icon if available
-        icon_path = Path(__file__).parent / "icon.png"
-        if not icon_path.exists():
-            icon_path = Path("icon.png")
+        # Frozen builds unpack bundled data to sys._MEIPASS; from source the
+        # icon sits in the project root.
+        base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+        icon_path = base / "icon.png"
         if icon_path.exists():
             try:
                 icon_img = tk.PhotoImage(file=str(icon_path))
@@ -366,32 +259,62 @@ class TroubleshooterApp:
         self._game_folder: Path | None = None
         self._linux_launch_options_btn: ctk.CTkButton | None = None
         self._check_thread: threading.Thread | None = None
-        self._result_queue: queue.Queue = queue.Queue()
+        self._current_results: list[DiagnosticResult] = []
+        # Incremented per game scan; a finished scan with an older token is
+        # stale because the game was switched in the meantime.
+        self._scan_token = 0
 
         self._build_ui()
-        self._select_initial_game()
-        self._on_game_changed()
+        self._game_var.set(DEFAULT_GAME_ORDER[0])
+        self._start_initial_scan()
 
-    def _select_initial_game(self) -> None:
-        """Try ER first, fallback to first installed game."""
-        default_order = [
-            "Elden Ring",
-            "Elden Ring Nightreign",
-            "Dark Souls III",
-            "Dark Souls Remastered",
-            "Dark Souls II: Scholar of the First Sin",
-            "Sekiro: Shadows Die Twice",
-            "Armored Core VI: Fires of Rubicon",
-        ]
-        for game_name in default_order:
-            key = GAME_MANIFEST_KEYS.get(game_name)
-            if key:
-                folder, _ = autoscan(key)
+    def _in_background(self, work, on_done) -> None:
+        """Run work() on a thread, then on_done(result) on the Tk thread."""
+        holder: dict = {}
+
+        def target() -> None:
+            try:
+                holder["result"] = work()
+            except Exception:
+                holder["result"] = None
+
+        thread = threading.Thread(target=target, daemon=True)
+        thread.start()
+
+        def poll() -> None:
+            if thread.is_alive():
+                self.root.after(30, poll)
+            else:
+                on_done(holder.get("result"))
+
+        self.root.after(30, poll)
+
+    def _new_scan(self) -> int:
+        self._scan_token += 1
+        self._game_folder_label.configure(
+            text="Scanning...", text_color=COLORS["fg_muted"]
+        )
+        return self._scan_token
+
+    def _start_initial_scan(self) -> None:
+        """Select the first installed game in DEFAULT_GAME_ORDER."""
+        token = self._new_scan()
+
+        def work() -> tuple[str, Path] | None:
+            for game_name in DEFAULT_GAME_ORDER:
+                folder = find_game_folder(GAME_MANIFEST_KEYS[game_name])
                 if folder:
-                    self._game_var.set(game_name)
-                    return
-        # Nothing found, default to ER anyway
-        self._game_var.set("Elden Ring")
+                    return game_name, folder
+            return None
+
+        def done(found: tuple[str, Path] | None) -> None:
+            if token != self._scan_token:
+                return
+            if found:
+                self._game_var.set(found[0])
+            self._apply_game_folder(found[1] if found else None)
+
+        self._in_background(work, done)
 
     def _build_ui(self) -> None:
         main = ctk.CTkFrame(self.root, fg_color=COLORS["bg"])
@@ -540,35 +463,24 @@ class TroubleshooterApp:
     # -------------------------------------------------------------------------
 
     def _on_game_changed(self) -> None:
-        game_name = self._game_var.get()
-        key = GAME_MANIFEST_KEYS.get(game_name)
+        key = GAME_MANIFEST_KEYS.get(self._game_var.get())
+        token = self._new_scan()
 
-        self._game_folder_label.configure(
-            text="Scanning...", text_color=COLORS["fg_muted"]
-        )
-        self.root.update_idletasks()
+        def done(folder: Path | None) -> None:
+            if token == self._scan_token:
+                self._apply_game_folder(folder)
 
-        game_folder, _ = autoscan(key) if key else (None, None)
+        self._in_background(lambda: find_game_folder(key) if key else None, done)
 
-        if game_folder:
-            self._game_folder = game_folder
-            self._game_folder_label.configure(
-                text=str(game_folder), text_color=COLORS["fg"]
-            )
+    def _apply_game_folder(self, folder: Path | None) -> None:
+        self._game_folder = folder
+        if folder:
+            self._game_folder_label.configure(text=str(folder), text_color=COLORS["fg"])
         else:
-            self._game_folder = None
             self._game_folder_label.configure(
-                text="Not found automatically", text_color=COLORS["yellow"]
+                text="Not found automatically. Use Set Game Folder.",
+                text_color=COLORS["yellow"],
             )
-            if _ask_yes_no(
-                self.root,
-                "Game Not Found",
-                f"{game_name} could not be found automatically.\n"
-                "Would you like to locate the game folder manually?",
-            ):
-                self._pick_game_folder()
-                return  # _pick_game_folder already triggers _run_checks
-
         self._update_linux_launch_options_button()
         self._run_checks()
 
@@ -594,12 +506,9 @@ class TroubleshooterApp:
             and (picked / exe_name).exists()
         ):
             picked = picked.parent
-        self._game_folder = picked
-        self._game_folder_label.configure(
-            text=str(self._game_folder), text_color=COLORS["fg"]
-        )
-        self._update_linux_launch_options_button()
-        self._run_checks()
+        # A scan still running for this game must not replace the choice.
+        self._scan_token += 1
+        self._apply_game_folder(picked)
 
     def _update_linux_launch_options_button(self) -> None:
         if self._linux_launch_options_btn is None:
@@ -635,18 +544,14 @@ class TroubleshooterApp:
     def _show_perm_fix(self) -> None:
         checker_cls = GAME_OPTIONS.get(self._game_var.get(), EldenRingChecker)
         game_exe = checker_cls.EXE_NAME
-        _show_permission_fix(self.root, self._game_folder, game_exe)
+        _show_permission_fix(
+            self.root, self._game_folder, game_exe, checker_cls.MANIFEST_KEY
+        )
 
     # -------------------------------------------------------------------------
 
     def _run_checks(self) -> None:
-        self._check_thread = None
-        while not self._result_queue.empty():
-            try:
-                self._result_queue.get_nowait()
-            except queue.Empty:
-                break
-
+        clear_caches()
         for widget in self.results_frame.winfo_children():
             widget.destroy()
 
@@ -657,46 +562,34 @@ class TroubleshooterApp:
         checker_cls = GAME_OPTIONS.get(self._game_var.get(), EldenRingChecker)
         checker = checker_cls(game_folder=self._game_folder)
 
-        self._current_results: list[DiagnosticResult] = []
+        self._current_results = []
 
+        # Each run gets its own queue, so results of a superseded run that is
+        # still finishing never reach the new one.
+        result_queue: queue.Queue = queue.Queue()
         thread = threading.Thread(
             target=self._check_worker,
-            args=(checker, self._result_queue),
+            args=(checker, result_queue),
             daemon=True,
         )
         self._check_thread = thread
         thread.start()
-        self.root.after(50, lambda: self._poll_results(thread))
+        self.root.after(50, lambda: self._poll_results(thread, result_queue))
 
     def _check_worker(self, checker: BaseChecker, q: queue.Queue) -> None:
-        def emit(result):
-            if result is None:
-                return
-            if isinstance(result, list):
-                for r in result:
-                    q.put(r)
-            else:
-                q.put(result)
+        try:
+            for name, check in checker.checks():
+                for result in run_check(name, check):
+                    q.put(result)
+        finally:
+            q.put(_SENTINEL)
 
-        emit(checker._check_game_installation())
-        emit(check_build_id(checker.MANIFEST_KEY))
-        emit(checker._check_steam_running())
-        if checker.game_folder and checker.game_folder.exists():
-            emit(checker._check_game_executable())
-            emit(checker._check_run_as_admin_flag())
-            emit(checker._check_extra())  # regulation.bin
-            emit(checker._check_piracy_indicators())  # game integrity
-        emit(checker._check_problematic_processes())
-        emit(checker._check_vpn_processes())
-        emit(checker._check_steam_elevated())
-        q.put(_SENTINEL)
-
-    def _poll_results(self, thread: threading.Thread) -> None:
+    def _poll_results(self, thread: threading.Thread, q: queue.Queue) -> None:
         if thread is not self._check_thread:
             return
         try:
             while True:
-                item = self._result_queue.get_nowait()
+                item = q.get_nowait()
                 if item is _SENTINEL:
                     self._progress.stop()
                     self._progress.pack_forget()
@@ -707,7 +600,7 @@ class TroubleshooterApp:
                 self._create_result_widget(item)
         except queue.Empty:
             pass
-        self.root.after(50, lambda: self._poll_results(thread))
+        self.root.after(50, lambda: self._poll_results(thread, q))
 
     # -------------------------------------------------------------------------
 
@@ -863,16 +756,7 @@ class TroubleshooterApp:
         if not self._current_results:
             return
 
-        # Only copy non-ok results, exclude platform-specific unavailable checks
-        relevant = [
-            r
-            for r in self._current_results
-            if r.status != "ok"
-            and not (
-                r.name == "Steam Elevation Check"
-                and "only available on Windows" in r.message
-            )
-        ]
+        relevant = [r for r in self._current_results if r.status != "ok"]
         if not relevant:
             # All green, nothing to copy
             self._copy_btn.configure(text="Nothing to copy")
@@ -882,7 +766,9 @@ class TroubleshooterApp:
             return
 
         lines = [
-            f"FromSoftware Troubleshooter - {self._game_var.get()}",
+            f"FromSoftware Troubleshooter {__version__} - {self._game_var.get()}",
+            f"OS: {platform.platform()}",
+            f"Game folder: {self._game_folder or 'not found'}",
             "=" * 60,
             "",
         ]
