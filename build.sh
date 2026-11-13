@@ -2,8 +2,6 @@
 set -e
 # Build script for fromsoftware-troubleshooter
 
-VERSION=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
-
 if [ "$(uname)" = "Linux" ]; then
     echo "Building Linux binary..."
     python3 -m PyInstaller --clean --noconfirm fromsoftware_troubleshooter_linux.spec

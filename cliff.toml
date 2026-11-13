@@ -1,0 +1,54 @@
+# git-cliff configuration: CHANGELOG.md sections and the next version, both
+# from conventional commits since the last v<major>.<minor>.<patch> tag.
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+header = """
+# FromSoftware Troubleshooter - Release History
+
+"""
+body = """
+{% if version -%}
+## Release {{ version | trim_start_matches(pat="v") }}
+**Released:** {{ timestamp | date(format="%B %d, %Y") }}
+{% else -%}
+## Unreleased
+{% endif -%}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits | unique(attribute="id") %}
+- {{ commit.message | upper_first | trim }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/Hapfel1/fromsoftware-troubleshooter/commit/{{ commit.id }}))
+{%- endfor %}
+{% endfor %}
+
+"""
+trim = true
+render_always = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+# Releases before 1.8.0 were tagged without the patch part and are ignored.
+tag_pattern = "v[0-9]+\\.[0-9]+\\.[0-9]+"
+filter_commits = true
+protect_breaking_commits = true
+commit_parsers = [
+  { message = "^Merge ", skip = true },
+  { message = "^Release ", skip = true },
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^(ci|build|style|test)", skip = true },
+  { message = "^feat", group = "<!-- 0 -->New Features" },
+  { message = "^fix", group = "<!-- 1 -->Bug Fixes" },
+  { message = "^perf", group = "<!-- 2 -->Performance" },
+  { message = "^chore\\(sizes\\)", group = "<!-- 3 -->Game File Sizes" },
+  { message = "^docs", group = "<!-- 4 -->Documentation" },
+  { message = "^refactor", group = "<!-- 5 -->Code Refactoring" },
+  { message = "^chore", group = "<!-- 6 -->Maintenance" },
+  { message = "^revert", group = "<!-- 7 -->Reverted Changes" },
+  { message = ".*", group = "<!-- 8 -->Other" },
+]
+
+[bump]
+features_always_bump_minor = true
+breaking_always_bump_major = true

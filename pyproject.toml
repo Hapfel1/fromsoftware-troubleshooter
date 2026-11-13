@@ -13,6 +13,7 @@ dependencies = [
     "customtkinter>=5.2",
     "pyperclip>=1.8",
     "pillow>=10.0",
+    "certifi>=2024.0",
 ]
 [project.scripts]
 fromsoftware-troubleshooter = "fromsoftware_troubleshooter.app:main"

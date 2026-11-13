@@ -10,8 +10,11 @@ import shlex
 import ssl
 import subprocess
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+
+import certifi
 
 
 @dataclass
@@ -54,31 +57,15 @@ def _load_manifest() -> dict:
         return _MANIFEST_CACHE
     _dbg(f"manifest: fetching from {MANIFEST_URL}")
     try:
-        with urllib.request.urlopen(MANIFEST_URL, timeout=3) as resp:
+        # Frozen builds cannot rely on the system CA paths of the build
+        # machine, so certificates come from the bundled certifi store.
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        with urllib.request.urlopen(MANIFEST_URL, timeout=3, context=ctx) as resp:
             _MANIFEST_CACHE = json.loads(resp.read().decode())
             _dbg(f"manifest: loaded from remote, keys={list(_MANIFEST_CACHE.keys())}")
             return _MANIFEST_CACHE
     except Exception as e:
-        # urllib wraps ssl.SSLError inside URLError.reason in frozen builds.
-        reason = getattr(e, "reason", e)
-        if isinstance(reason, ssl.SSLError):
-            _dbg(
-                "manifest: SSL cert error (frozen build), retrying without verification"
-            )
-            try:
-                ctx = ssl._create_unverified_context()
-                with urllib.request.urlopen(
-                    MANIFEST_URL, timeout=3, context=ctx
-                ) as resp:
-                    _MANIFEST_CACHE = json.loads(resp.read().decode())
-                    _dbg(
-                        f"manifest: loaded from remote (unverified), keys={list(_MANIFEST_CACHE.keys())}"
-                    )
-                    return _MANIFEST_CACHE
-            except Exception as e2:
-                _dbg(f"manifest: unverified fetch also failed ({e2}), trying local")
-        else:
-            _dbg(f"manifest: remote fetch failed ({e}), trying local")
+        _dbg(f"manifest: remote fetch failed ({e}), trying local")
     # Local fallback: check several likely locations
     candidates = [
         Path(__file__).with_name("game_file_sizes.json"),  # alongside checker.py
@@ -184,6 +171,42 @@ def check_build_id(manifest_key: str) -> DiagnosticResult:
     )
 
 
+def _newer_build_than_recorded(manifest_key: str) -> tuple[int, int] | None:
+    """(recorded, installed) build IDs when the installed build is newer."""
+    app_id = _APP_IDS.get(manifest_key)
+    stored = _load_manifest().get(manifest_key, {}).get("build_id", 0)
+    if not app_id or not stored:
+        return None
+    current = _read_local_build_id(app_id)
+    if current is None or current <= stored:
+        return None
+    return stored, current
+
+
+def _size_mismatch_result(
+    name: str, file_name: str, actual: int, entry: dict | None, manifest_key: str
+) -> DiagnosticResult | None:
+    """
+    Info result for a size mismatch caused by a game update newer than the
+    recorded sizes, or None when the mismatch is not explained by an update.
+    """
+    builds = _newer_build_than_recorded(manifest_key)
+    if not builds:
+        return None
+    expected = _format_size(entry["exact"]) if entry else "unknown"
+    return DiagnosticResult(
+        name=name,
+        status="info",
+        message=(
+            f"{file_name} size differs from the recorded size "
+            f"(found {_format_size(actual)}, recorded {expected}). The game was "
+            f"updated since (recorded build {builds[0]}, installed build "
+            f"{builds[1]}), so a new size is expected until the reference is "
+            "updated."
+        ),
+    )
+
+
 def _check_file_size(path: Path, game_key: str, file_key: str) -> str:
     """
     Returns 'ok', 'warning', or 'unknown'.
@@ -260,9 +283,23 @@ def _get_runasadmin_scope(exe_path: Path) -> str | None:
     return None
 
 
-def _get_running_process_names() -> set[str]:
-    """Return a set of lowercase running process names, cross-platform."""
-    names: set[str] = set()
+_process_cache: dict[str, list[int]] | None = None
+
+
+def clear_caches() -> None:
+    """Forget cached processes, Steam libraries and build IDs before a new run."""
+    global _process_cache, _library_cache
+    _process_cache = None
+    _library_cache = None
+    _build_id_cache.clear()
+
+
+def _get_running_processes() -> dict[str, list[int]]:
+    """Lowercase running process names mapped to their PIDs, cross-platform."""
+    global _process_cache
+    if _process_cache is not None:
+        return _process_cache
+    processes: dict[str, list[int]] = {}
     if _is_windows():
         try:
             out = subprocess.check_output(
@@ -272,8 +309,8 @@ def _get_running_process_names() -> set[str]:
             )
             for line in out.splitlines():
                 parts = line.strip().strip('"').split('","')
-                if parts:
-                    names.add(parts[0].lower())
+                if len(parts) >= 2 and parts[1].isdigit():
+                    processes.setdefault(parts[0].lower(), []).append(int(parts[1]))
         except Exception:
             pass
     else:
@@ -282,40 +319,115 @@ def _get_running_process_names() -> set[str]:
         for pid_dir in proc.iterdir():
             if not pid_dir.name.isdigit():
                 continue
+            pid = int(pid_dir.name)
             try:
-                names.add((pid_dir / "comm").read_text().strip().lower())
+                name = (pid_dir / "comm").read_text().strip().lower()
+                processes.setdefault(name, []).append(pid)
             except OSError:
                 pass
             try:
-                exe = (pid_dir / "exe").resolve()
-                names.add(exe.name.lower())
+                exe = (pid_dir / "exe").resolve().name.lower()
+                pids = processes.setdefault(exe, [])
+                if pid not in pids:
+                    pids.append(pid)
             except OSError:
                 pass
-    return names
+    _process_cache = processes
+    return processes
+
+
+def _get_running_process_names() -> set[str]:
+    """Lowercase names of running processes."""
+    return set(_get_running_processes())
+
+
+def _is_process_elevated(pid: int) -> bool | None:
+    """
+    Whether a Windows process runs elevated, or None if unknown. Access denied
+    on the token of a process owned by the same user means it is elevated.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    TOKEN_QUERY = 0x0008
+    TOKEN_ELEVATION = 20
+    ERROR_ACCESS_DENIED = 5
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    advapi32.OpenProcessToken.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.HANDLE),
+    ]
+    advapi32.OpenProcessToken.restype = wintypes.BOOL
+    advapi32.GetTokenInformation.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    advapi32.GetTokenInformation.restype = wintypes.BOOL
+
+    process = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not process:
+        return True if ctypes.get_last_error() == ERROR_ACCESS_DENIED else None
+    try:
+        token = wintypes.HANDLE()
+        if not advapi32.OpenProcessToken(process, TOKEN_QUERY, ctypes.byref(token)):
+            return True if ctypes.get_last_error() == ERROR_ACCESS_DENIED else None
+        try:
+            elevation = wintypes.DWORD()
+            size = wintypes.DWORD()
+            if not advapi32.GetTokenInformation(
+                token,
+                TOKEN_ELEVATION,
+                ctypes.byref(elevation),
+                ctypes.sizeof(elevation),
+                ctypes.byref(size),
+            ):
+                return None
+            return elevation.value != 0
+        finally:
+            kernel32.CloseHandle(token)
+    finally:
+        kernel32.CloseHandle(process)
 
 
 def _get_scheduled_problematic_processes() -> list[str]:
     """Return enabled scheduled tasks whose actions launch known processes."""
     if not _is_windows():
         return []
+    # Get-ScheduledTask returns language-independent State and Execute values,
+    # unlike the localized labels of "schtasks /query /v".
+    ps_script = (
+        "Get-ScheduledTask -ErrorAction SilentlyContinue | "
+        "Where-Object { [string]$_.State -ne 'Disabled' } | "
+        "ForEach-Object { foreach ($a in $_.Actions) { "
+        'if ($a.Execute) { "$($a.Execute) $($a.Arguments)" } } }'
+    )
     try:
-        output = subprocess.check_output(
-            ["schtasks", "/query", "/fo", "LIST", "/v"],
+        output = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+            capture_output=True,
             text=True,
             creationflags=subprocess.CREATE_NO_WINDOW,
-        )
+            timeout=20,
+        ).stdout
     except Exception:
         return []
 
     matches: list[str] = []
-    for task in re.split(r"\r?\n\s*\r?\n", output):
-        state_match = re.search(r"(?im)^\s*Scheduled Task State:\s*(.+)$", task)
-        if state_match and state_match.group(1).strip().lower() == "disabled":
+    for action in output.splitlines():
+        action = action.strip().casefold()
+        if not action:
             continue
-        action_match = re.search(r"(?im)^\s*Task To Run:\s*(.+)$", task)
-        if not action_match:
-            continue
-        action = action_match.group(1).casefold()
         for process in PROBLEMATIC_PROCESSES:
             process_pattern = rf"(?<![\w.-]){re.escape(process.casefold())}(?![\w.-])"
             if re.search(process_pattern, action) and process not in matches:
@@ -323,19 +435,69 @@ def _get_scheduled_problematic_processes() -> list[str]:
     return matches
 
 
+def _is_windows_service_running(service_name: str) -> bool:
+    """Whether the named Windows service or kernel driver is running."""
+    import ctypes
+    from ctypes import wintypes
+
+    class SERVICE_STATUS(ctypes.Structure):
+        _fields_ = [
+            ("dwServiceType", wintypes.DWORD),
+            ("dwCurrentState", wintypes.DWORD),
+            ("dwControlsAccepted", wintypes.DWORD),
+            ("dwWin32ExitCode", wintypes.DWORD),
+            ("dwServiceSpecificExitCode", wintypes.DWORD),
+            ("dwCheckPoint", wintypes.DWORD),
+            ("dwWaitHint", wintypes.DWORD),
+        ]
+
+    SC_MANAGER_CONNECT = 0x0001
+    SERVICE_QUERY_STATUS = 0x0004
+    SERVICE_RUNNING = 4
+
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    advapi.OpenSCManagerW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+    ]
+    advapi.OpenSCManagerW.restype = wintypes.HANDLE
+    advapi.OpenServiceW.argtypes = [wintypes.HANDLE, wintypes.LPCWSTR, wintypes.DWORD]
+    advapi.OpenServiceW.restype = wintypes.HANDLE
+    advapi.QueryServiceStatus.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(SERVICE_STATUS),
+    ]
+    advapi.QueryServiceStatus.restype = wintypes.BOOL
+    advapi.CloseServiceHandle.argtypes = [wintypes.HANDLE]
+    advapi.CloseServiceHandle.restype = wintypes.BOOL
+
+    scm = advapi.OpenSCManagerW(None, None, SC_MANAGER_CONNECT)
+    if not scm:
+        return False
+    try:
+        service = advapi.OpenServiceW(scm, service_name, SERVICE_QUERY_STATUS)
+        if not service:
+            return False
+        try:
+            status = SERVICE_STATUS()
+            if not advapi.QueryServiceStatus(service, ctypes.byref(status)):
+                return False
+            return status.dwCurrentState == SERVICE_RUNNING
+        finally:
+            advapi.CloseServiceHandle(service)
+    finally:
+        advapi.CloseServiceHandle(scm)
+
+
 def _is_hidhide_service_running() -> bool:
     """Return whether the HidHide kernel service is installed and running."""
     if not _is_windows():
         return False
     try:
-        output = subprocess.check_output(
-            ["sc", "query", "HidHide"],
-            text=True,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
-    except Exception:
+        return _is_windows_service_running("HidHide")
+    except OSError:
         return False
-    return bool(re.search(r"(?im)^\s*STATE\s*:\s*\d+\s+RUNNING\b", output))
 
 
 def _get_running_windows_services(service_names: tuple[str, ...]) -> list[str]:
@@ -345,15 +507,10 @@ def _get_running_windows_services(service_names: tuple[str, ...]) -> list[str]:
     running: list[str] = []
     for service_name in service_names:
         try:
-            output = subprocess.check_output(
-                ["sc", "query", service_name],
-                text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        except Exception:
+            if _is_windows_service_running(service_name):
+                running.append(service_name)
+        except OSError:
             continue
-        if re.search(r"(?im)^\s*STATE\s*:\s*\d+\s+RUNNING\b", output):
-            running.append(service_name)
     return running
 
 
@@ -375,8 +532,18 @@ def _is_flatpak_steam() -> bool:
     ).exists()
 
 
+_library_cache: list[Path] | None = None
+
+
 def _get_steam_library_folders() -> list[Path]:
     """Return all Steam steamapps directories on this machine."""
+    global _library_cache
+    if _library_cache is None:
+        _library_cache = _scan_steam_library_folders()
+    return list(_library_cache)
+
+
+def _scan_steam_library_folders() -> list[Path]:
     libraries: list[Path] = []
 
     if _is_windows():
@@ -574,14 +741,29 @@ def find_save_file(manifest_key: str) -> Path | None:
     return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
-def autoscan(manifest_key: str) -> tuple[Path | None, Path | None]:
-    """Return (game_folder, save_file_path) for the given game."""
-    return find_game_folder(manifest_key), find_save_file(manifest_key)
+def windows_save_root(manifest_key: str) -> Path | None:
+    """The game's top-level save folder under %APPDATA% on Windows."""
+    subpath = _SAVE_ROAMING_SUBPATHS.get(manifest_key)
+    if not subpath:
+        return None
+    appdata = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    return appdata / subpath.split("/")[0]
 
 
-def get_linux_launch_options(
-    manifest_key: str, game_folder: Path | None
-) -> str | None:
+def permission_fix_commands(game_folder: Path | None, manifest_key: str) -> list[str]:
+    """takeown/icacls commands for the game folder and its save folder."""
+    username = os.environ.get("USERNAME", "YourUsername")
+    folders = [game_folder, windows_save_root(manifest_key)]
+    commands: list[str] = []
+    for folder in folders:
+        if folder is None:
+            continue
+        commands.append(f'takeown /F "{folder}" /R /D Y')
+        commands.append(f'icacls "{folder}" /grant "{username}":F /T')
+    return commands
+
+
+def get_linux_launch_options(manifest_key: str, game_folder: Path | None) -> str | None:
     """Build Steam Linux launch options for the detected game's library."""
     app_id = _APP_IDS.get(manifest_key)
     if not app_id or not game_folder:
@@ -715,6 +897,25 @@ VPN_PROCESSES = [
 ]
 
 
+CheckOutput = DiagnosticResult | list[DiagnosticResult] | None
+
+
+def run_check(name: str, check: Callable[[], CheckOutput]) -> list[DiagnosticResult]:
+    """Run one check; an exception becomes a warning result named `name`."""
+    try:
+        output = check()
+    except Exception as e:
+        _dbg(f"check {name} raised {e!r}")
+        output = DiagnosticResult(
+            name=name,
+            status="warning",
+            message=f"This check could not run: {e}",
+        )
+    if output is None:
+        return []
+    return output if isinstance(output, list) else [output]
+
+
 # ---------------------------------------------------------------------------
 # Base checker
 # ---------------------------------------------------------------------------
@@ -750,23 +951,35 @@ class BaseChecker:
             return self.game_folder / self.GAME_SUBFOLDER
         return self.game_folder
 
+    def checks(self) -> list[tuple[str, Callable[[], CheckOutput]]]:
+        """Checks in display order, as (name shown if it fails, callable)."""
+        folder_ok = bool(self.game_folder and self.game_folder.exists())
+        checks: list[tuple[str, Callable[[], CheckOutput]]] = [
+            ("Game Installation", self._check_game_installation),
+            ("Game Version Check", lambda: check_build_id(self.MANIFEST_KEY)),
+            ("Steam Status", self._check_steam_running),
+        ]
+        if folder_ok:
+            checks += [
+                ("Game Executable", self._check_game_executable),
+                ("Run as Administrator Flag", self._check_run_as_admin_flag),
+            ]
+        checks.append(("Game-Specific Checks", self._check_extra))
+        if folder_ok:
+            checks.append(("Game Integrity", self._check_piracy_indicators))
+        checks += [
+            ("Process Check", self._check_problematic_processes),
+            ("VPN Check", self._check_vpn_processes),
+            ("Steam Elevation Check", self._check_steam_elevated),
+            ("Save File", self._check_save_file_health),
+            ("Disk Space", self._check_disk_space),
+        ]
+        return checks
+
     def run_all_checks(self) -> list[DiagnosticResult]:
         results: list[DiagnosticResult] = []
-        results.append(check_build_id(self.MANIFEST_KEY))
-        results.append(self._check_game_installation())
-        if self.game_folder and self.game_folder.exists():
-            results.extend(self._check_piracy_indicators())
-            results.append(self._check_game_executable())
-            admin_flag = self._check_run_as_admin_flag()
-            if admin_flag:
-                results.append(admin_flag)
-        results.extend(self._check_problematic_processes())
-        results.extend(self._check_vpn_processes())
-        results.append(self._check_steam_running())
-        results.append(self._check_steam_elevated())
-        if self.save_file_path:
-            results.extend(self._check_save_file_health())
-        results.extend(self._check_extra())
+        for name, check in self.checks():
+            results.extend(run_check(name, check))
         return results
 
     def _check_extra(self) -> list[DiagnosticResult]:
@@ -843,44 +1056,42 @@ class BaseChecker:
                 message=f"{self.EXE_NAME} not found - cannot check firewall rules",
             )
 
+        # Filters by program first and resolves rules only for matching
+        # filters; one Get-NetFirewallApplicationFilter call per block rule is
+        # too slow on systems with many rules.
         ps_script = r"""
-$programs = $env:FST_FIREWALL_PROGRAMS -split "`n" |
-    Where-Object { $_ } |
-    ForEach-Object {
-        [Environment]::ExpandEnvironmentVariables($_).Trim().Trim('"').Replace('/', '\')
-    }
-$programs = @($programs | ForEach-Object { $_.ToLowerInvariant() })
-$matches = @(
-    Get-NetFirewallRule -Enabled True -Action Block -ErrorAction Stop |
+function Normalize([string]$path) {
+    ([Environment]::ExpandEnvironmentVariables($path)).Trim().Trim('"').Replace('/', '\').ToLowerInvariant()
+}
+$programs = @($env:FST_FIREWALL_PROGRAMS -split "`n" | Where-Object { $_ } | ForEach-Object { Normalize $_ })
+$found = @(
+    Get-NetFirewallApplicationFilter -ErrorAction Stop |
+        Where-Object { $programs -contains (Normalize $_.Program) } |
         ForEach-Object {
-            $rule = $_
-            Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule |
+            $program = Normalize $_.Program
+            Get-NetFirewallRule -AssociatedNetFirewallApplicationFilter $_ |
+                Where-Object { [string]$_.Enabled -eq 'True' -and [string]$_.Action -eq 'Block' } |
                 ForEach-Object {
-                    $program = ([Environment]::ExpandEnvironmentVariables(
-                        [string]$_.Program
-                    )).Trim().Trim('"').Replace('/', '\').ToLowerInvariant()
-                    if ($programs -contains $program) {
-                        [PSCustomObject]@{
-                            Name = $rule.DisplayName
-                            Direction = [string]$rule.Direction
-                            Program = $program
-                        }
+                    [PSCustomObject]@{
+                        Name = $_.DisplayName
+                        Direction = [string]$_.Direction
+                        Program = $program
                     }
                 }
-            }
+        }
 )
-if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
+if ($found.Count -eq 0) { '[]' } else { $found | ConvertTo-Json -Compress }
 """
         env = os.environ.copy()
         env["FST_FIREWALL_PROGRAMS"] = "\n".join(str(path) for path in executable_paths)
         try:
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_script],
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
                 capture_output=True,
                 text=True,
                 env=env,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                timeout=10,
+                timeout=30,
             )
             if result.returncode != 0:
                 return DiagnosticResult(
@@ -1129,7 +1340,9 @@ if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
             return DiagnosticResult(
                 name="Game Installation",
                 status="warning",
-                message="Game folder not specified",
+                message="Game folder not found automatically",
+                fix_available=True,
+                fix_action="Use Set Game Folder to select the game's install folder.",
             )
         if not self.game_folder.exists():
             return DiagnosticResult(
@@ -1169,6 +1382,11 @@ if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
                 message=f"{self.EXE_NAME} found - {_format_size(actual_size)}",
             )
         elif size_status == "warning":
+            updated = _size_mismatch_result(
+                "Game Executable", self.EXE_NAME, actual_size, entry, self.MANIFEST_KEY
+            )
+            if updated:
+                return updated
             expected = _format_size(entry["exact"]) if entry else "unknown"
             return DiagnosticResult(
                 name="Game Executable",
@@ -1503,6 +1721,15 @@ if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
                 message=f"regulation.bin is valid - {_format_size(actual_size)}",
             )
         elif size_status == "warning":
+            updated = _size_mismatch_result(
+                "Regulation File",
+                "regulation.bin",
+                actual_size,
+                entry,
+                self.MANIFEST_KEY,
+            )
+            if updated:
+                return updated
             expected = _format_size(entry["exact"]) if entry else "unknown"
             return DiagnosticResult(
                 name="Regulation File",
@@ -1695,137 +1922,82 @@ if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
             message="Steam is not currently running",
         )
 
-    def _check_steam_elevated(self) -> DiagnosticResult:
+    def _check_steam_elevated(self) -> DiagnosticResult | None:
         if not _is_windows():
+            return None
+        steam_pids = _get_running_processes().get("steam.exe", [])
+        if not steam_pids:
             return DiagnosticResult(
                 name="Steam Elevation Check",
                 status="info",
-                message="Steam elevation check only available on Windows",
+                message="Steam is not running (elevation check skipped)",
             )
-        ps_script = """
-            Add-Type -TypeDefinition @"
-            using System; using System.Runtime.InteropServices; using System.Diagnostics;
-            public class ProcessChecker {
-                [DllImport("advapi32.dll", SetLastError=true)]
-                public static extern bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
-                [DllImport("advapi32.dll", SetLastError=true)]
-                public static extern bool GetTokenInformation(IntPtr TokenHandle, int TokenInformationClass, IntPtr TokenInformation, uint TokenInformationLength, out uint ReturnLength);
-                [DllImport("kernel32.dll", SetLastError=true)]
-                public static extern bool CloseHandle(IntPtr hObject);
-                public static int CheckProcessElevation(int processId) {
-                    IntPtr tokenHandle = IntPtr.Zero;
-                    try {
-                        Process process = Process.GetProcessById(processId);
-                        if (OpenProcessToken(process.Handle, 0x0008, out tokenHandle)) {
-                            uint returnLength; IntPtr elevationResult = Marshal.AllocHGlobal(4);
-                            try { if (GetTokenInformation(tokenHandle, 20, elevationResult, 4, out returnLength)) { return Marshal.ReadInt32(elevationResult) != 0 ? 1 : 0; } }
-                            finally { Marshal.FreeHGlobal(elevationResult); }
-                        }
-                        return 0;
-                    } catch (System.ComponentModel.Win32Exception ex) { if (ex.NativeErrorCode == 5) { return 1; } return -1;
-                    } catch (UnauthorizedAccessException) { return 1;
-                    } catch { return -1;
-                    } finally { if (tokenHandle != IntPtr.Zero) { CloseHandle(tokenHandle); } }
-                }
-            }
-"@
-            $procs = Get-Process -Name "steam" -ErrorAction SilentlyContinue
-            if (-not $procs) { Write-Output "not_running"; exit 1 }
-            $elevated = $false
-            foreach ($p in $procs) { try { if ([ProcessChecker]::CheckProcessElevation($p.Id) -eq 1) { $elevated = $true; break } } catch {} }
-            if ($elevated) { Write-Output "elevated" } else { Write-Output "normal" }
-        """
-        try:
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_script],
-                capture_output=True,
-                text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                timeout=5,
+        states = [_is_process_elevated(pid) for pid in steam_pids]
+        if any(state is True for state in states):
+            steps = [
+                "Steam is running with administrator privileges.",
+                "",
+                "1. Exit Steam completely",
+                "",
+                "2. Right-click steam.exe > Properties > Compatibility tab",
+                "   -> Uncheck 'Run this program as an administrator'",
+                "",
+                f"3. Right-click {self.EXE_NAME} in the game folder > Properties > "
+                "Compatibility tab",
+                "   -> Uncheck 'Run this program as an administrator'",
+                "",
+                "4. Take Ownership (PowerShell as Admin):",
+                "",
+                *permission_fix_commands(self.game_folder, self.MANIFEST_KEY),
+                "",
+                "5. If issues persist:",
+                "   - Reinstall Steam (download the installer from steampowered.com "
+                "and run it)",
+                "   - OR: In Steam, uninstall the game, delete the game folder"
+                + (f" {self.game_folder}" if self.game_folder else "")
+                + ", restart Steam and reinstall the game",
+            ]
+            return DiagnosticResult(
+                name="Steam Running as Administrator",
+                status="error",
+                message="Steam is running with elevated privileges. This causes permission issues.",
+                fix_available=True,
+                fix_action="\n".join(steps),
             )
-            output = ""
-            for line in reversed(result.stdout.strip().split("\n")):
-                stripped = line.strip().lower()
-                if stripped and not stripped.startswith("debug:"):
-                    output = stripped
-                    break
-            if output == "not_running" or output == "elevated":
-                if output == "not_running":
-                    return DiagnosticResult(
-                        name="Steam Elevation Check",
-                        status="info",
-                        message="Steam is not running (elevation check skipped)",
-                    )
-                appdata_path = Path(os.environ.get("APPDATA", "")) / self.GAME_NAME
-                username = os.environ.get("USERNAME", "YourUsername")
-                fix_message = (
-                    "Steam is running with administrator privileges.\n\n"
-                    "1. Exit Steam completely\n\n"
-                    "2. Right-click steam.exe > Properties > Compatibility tab\n"
-                    "   → Uncheck 'Run this program as an administrator'\n\n"
-                    f"3. Right-click {self.EXE_NAME} in game folder > Properties > Compatibility tab\n"
-                    "   → Uncheck 'Run this program as an administrator'\n\n"
-                    "4. Take Ownership (PowerShell as Admin):\n\n"
-                    f'takeown /F "{self.game_folder}" /R /D Y\n'
-                    f'icacls "{self.game_folder}" /grant {username}:F /T\n\n'
-                    f'takeown /F "{appdata_path}" /R /D Y\n'
-                    f'icacls "{appdata_path}" /grant {username}:F /T\n\n'
-                    "5. If issues persist:\n"
-                    "   • Reinstall Steam (download installer from steampowered.com and run)\n"
-                    "   • OR: In Steam, uninstall game, then manually delete entire folder at\n"
-                    f"     {self.game_folder}, restart Steam, and reinstall the game"
-                )
-                return DiagnosticResult(
-                    name="Steam Running as Administrator",
-                    status="error",
-                    message="Steam is running with elevated privileges. This causes permission issues.",
-                    fix_available=True,
-                    fix_action=fix_message,
-                )
-            elif output == "normal":
-                return DiagnosticResult(
-                    name="Steam Elevation Check",
-                    status="ok",
-                    message="Steam is running with normal privileges",
-                )
+        if all(state is False for state in states):
             return DiagnosticResult(
                 name="Steam Elevation Check",
-                status="warning",
-                message="Could not determine if Steam is elevated",
+                status="ok",
+                message="Steam is running with normal privileges",
             )
-        except subprocess.TimeoutExpired:
-            return DiagnosticResult(
-                name="Steam Elevation Check",
-                status="warning",
-                message="Steam elevation check timed out",
-            )
-        except Exception as e:
-            return DiagnosticResult(
-                name="Steam Elevation Check",
-                status="warning",
-                message=f"Could not check Steam elevation: {e}",
-            )
+        return DiagnosticResult(
+            name="Steam Elevation Check",
+            status="warning",
+            message="Could not determine if Steam is elevated",
+        )
 
     def _check_save_file_health(self) -> list[DiagnosticResult]:
-        results: list[DiagnosticResult] = []
-        if not self.save_file_path or not self.save_file_path.exists():
+        if self.save_file_path is None:
+            self.save_file_path = find_save_file(self.MANIFEST_KEY)
+        if self.save_file_path is None:
+            return []
+        if not self.save_file_path.exists():
             return [
                 DiagnosticResult(
                     name="Save File",
-                    status="error" if self.save_file_path else "info",
-                    message=f"Save file not found: {self.save_file_path}"
-                    if self.save_file_path
-                    else "No save file loaded",
+                    status="error",
+                    message=f"Save file not found: {self.save_file_path}",
                 )
             ]
+        results: list[DiagnosticResult] = []
         if not os.access(self.save_file_path, os.R_OK):
             results.append(
                 DiagnosticResult(
                     name="Save File Permissions",
                     status="error",
-                    message="Cannot read save file - check file permissions",
+                    message=f"Cannot read the save file {self.save_file_path}",
                     fix_available=True,
-                    fix_action="Run as administrator or check file permissions",
+                    fix_action="Check the permissions of the save folder.",
                 )
             )
         else:
@@ -1833,7 +2005,7 @@ if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
                 DiagnosticResult(
                     name="Save File Permissions",
                     status="ok",
-                    message="Save file is readable",
+                    message=f"Save file is readable: {self.save_file_path}",
                 )
             )
         file_size = self.save_file_path.stat().st_size
@@ -1853,26 +2025,53 @@ if ($matches.Count -eq 0) { '[]' } else { $matches | ConvertTo-Json -Compress }
                     message=f"Save file size: {_format_size(file_size)}",
                 )
             )
-        if _is_windows():
-            try:
-                import shutil
-
-                _, _, free = shutil.disk_usage(self.save_file_path.parent)
-                free_gb = free // (1024**3)
-                results.append(
-                    DiagnosticResult(
-                        name="Disk Space",
-                        status="warning" if free_gb < 1 else "ok",
-                        message=f"{'Low disk space' if free_gb < 1 else 'Sufficient disk space'}: {free_gb} GB free",
-                        fix_available=free_gb < 1,
-                        fix_action="Free up disk space for save backups"
-                        if free_gb < 1
-                        else "",
-                    )
-                )
-            except Exception:
-                pass
         return results
+
+    def _check_disk_space(self) -> DiagnosticResult | None:
+        """Free space on the drives holding the saves and the game."""
+        import shutil
+
+        locations: list[tuple[str, Path]] = []
+        if self.save_file_path:
+            locations.append(("save folder", self.save_file_path.parent))
+        elif _is_windows():
+            save_root = windows_save_root(self.MANIFEST_KEY)
+            if save_root:
+                locations.append(("save folder", save_root.parent))
+        if self.game_folder:
+            locations.append(("game folder", self.game_folder))
+
+        low: list[str] = []
+        checked: list[str] = []
+        seen_devices: set[int] = set()
+        for label, path in locations:
+            if not path.exists():
+                continue
+            device = path.stat().st_dev
+            if device in seen_devices:
+                continue
+            seen_devices.add(device)
+            free_gb = shutil.disk_usage(path).free / 1024**3
+            entry = f"{label} ({path.anchor or path}): {free_gb:.1f} GB free"
+            checked.append(entry)
+            if free_gb < 1:
+                low.append(entry)
+        if not checked:
+            return None
+        if low:
+            return DiagnosticResult(
+                name="Low Disk Space",
+                status="warning",
+                message="Less than 1 GB free. Saving and game updates can fail:",
+                bullet_items=low,
+                fix_available=True,
+                fix_action="Free up space on the listed drive.",
+            )
+        return DiagnosticResult(
+            name="Disk Space",
+            status="ok",
+            message="Sufficient disk space: " + "; ".join(checked),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2027,6 +2226,11 @@ class DarkSouls2Checker(BaseChecker):
         firewall = self._check_firewall_block()
         if firewall:
             results.append(firewall)
+        if self.game_folder and self.game_folder.exists():
+            coop_admin = self._check_seamless_coop_launcher_admin_flag()
+            if coop_admin:
+                results.append(coop_admin)
+            results.extend(self._check_seamless_coop())
         return results
 
 

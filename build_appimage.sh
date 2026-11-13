@@ -63,7 +63,13 @@ ln -s usr/share/icons/hicolor/256x256/apps/fromsoftware-troubleshooter.png "$APP
 # Build AppImage
 echo "Building AppImage..."
 OUTPUT="dist/${APP_NAME}-${VERSION}-x86_64.AppImage"
-ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run "$APPDIR" "$OUTPUT"
+# Signing is optional: APPIMAGE_SIGN_KEY is the GPG key ID (the key must be
+# in the keyring), APPIMAGETOOL_SIGN_PASSPHRASE its passphrase if any.
+set --
+if [ -n "$APPIMAGE_SIGN_KEY" ]; then
+    set -- --sign --sign-key "$APPIMAGE_SIGN_KEY"
+fi
+ARCH=x86_64 ./appimagetool-x86_64.AppImage --appimage-extract-and-run "$@" "$APPDIR" "$OUTPUT"
 chmod +x "$OUTPUT"
 
 echo "AppImage created: $OUTPUT"

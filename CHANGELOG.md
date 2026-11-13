@@ -1,0 +1,2 @@
+# FromSoftware Troubleshooter - Release History
+

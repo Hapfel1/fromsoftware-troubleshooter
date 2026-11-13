@@ -1,91 +1,332 @@
+# Release flow:
+#   1. plan: next version from the conventional commits since the last
+#      v<major>.<minor>.<patch> tag (git-cliff), or the dispatch input /
+#      NEXT_VERSION_OVERRIDE variable while that version is not tagged yet.
+#   2. release branch: on a push to master with a new version, bumps the
+#      version, prepends the CHANGELOG.md section and pushes release-v<version>.
+#   3. build: Linux AppImage and Windows exe, from the release branch when
+#      there is one, else from the pushed commit or pull request.
+#   4. finalize: opens or updates the release PR and creates a draft GitHub
+#      release with both builds. Publishing the draft starts
+#      nexusmods-upload.yml.
+#
+# Secrets:
+#   PUSH_TOKEN (recommended)  PAT with contents and pull-request write access.
+#     Without it the workflow token is used: the release PR then runs no
+#     checks, and "Allow GitHub Actions to create and approve pull requests"
+#     must be enabled in the repository settings.
+#   CODE_SIGNING_CERT, CODE_SIGNING_PASSWORD (optional)  Windows exe signing.
+#   APPIMAGE_GPG_PRIVATE_KEY, APPIMAGE_GPG_PASSPHRASE (optional)  AppImage signing.
+
 name: Build & Release
 
 on:
   push:
     branches:
       - master
-    tags:
-      - 'v*'
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version instead of the one from the commits (e.g. v1.9.0)"
+        required: false
+        default: ""
+
+concurrency:
+  group: release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    outputs:
+      current_version: ${{ steps.version.outputs.current_version }}
+      next_version: ${{ steps.version.outputs.next_version }}
+      release: ${{ steps.version.outputs.release }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system deps
-        run: sudo apt-get install -y python3-tk libfuse2
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: '3.13'
+          fetch-depth: 0
+          fetch-tags: true
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
 
-      - name: Install dependencies
-        run: uv sync --all-groups
+      - name: Lint
+        run: uv run --locked ruff check .
 
-      - name: Build binary
-        run: uv run python -m PyInstaller --clean --noconfirm fromsoftware_troubleshooter_linux.spec
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: git-cliff
 
-      - name: Create AppImage
+      - name: Resolve versions
+        id: version
+        env:
+          OVERRIDE: ${{ inputs.version || vars.NEXT_VERSION_OVERRIDE }}
         run: |
-          chmod +x build_appimage.sh
-          ./build_appimage.sh
+          set -euo pipefail
+          version=$(grep -Po '(?<=^version = ")[^"]*' pyproject.toml)
+          package=$(grep -Po '(?<=^__version__ = ")[^"]*' fromsoftware_troubleshooter/__init__.py)
+          if [ "$version" != "$package" ]; then
+            echo "::error::pyproject.toml has $version, fromsoftware_troubleshooter/__init__.py has $package"
+            exit 1
+          fi
+          current="v$version"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-appimage
-          path: dist/*.AppImage
+          override="${OVERRIDE:+v${OVERRIDE#v}}"
+          if [ -n "$override" ] && [ -z "$(git tag -l "$override")" ]; then
+            next="$override"
+          else
+            next=$(git cliff --bumped-version --unreleased)
+          fi
 
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+          release=false
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ] \
+            && [ "$GITHUB_REF" = "refs/heads/master" ] \
+            && [ "$next" != "$current" ]; then
+            release=true
+            # git-cliff counts from the last tag; without the tag of the
+            # current version it would recount every commit.
+            if [ -z "$(git tag -l "$current")" ]; then
+              echo "::error::Tag $current is missing. Tag the commit of the last release: git tag $current <commit> && git push origin $current"
+              exit 1
+            fi
+          fi
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
+          {
+            echo "current_version=$current"
+            echo "next_version=$next"
+            echo "release=$release"
+          } >> "$GITHUB_OUTPUT"
+          echo "Current $current, next $next, release: $release"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Install dependencies
-        run: uv sync --all-groups
-
-      - name: Build
-        run: uv run python -m PyInstaller --clean --noconfirm fromsoftware_troubleshooter_windows.spec
-
-      - name: Zip output
-        run: Compress-Archive -Path "dist\FromSoftware Troubleshooter.exe" -DestinationPath "dist\FromSoftware-Troubleshooter-windows.zip"
-        shell: pwsh
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: dist/*.zip
-
-  release:
-    needs: [build-linux, build-windows]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+  release-branch:
+    name: Create release branch
+    needs: plan
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      NEXT_VERSION: ${{ needs.plan.outputs.next_version }}
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          merge-multiple: true
-          path: release/
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.PUSH_TOKEN || github.token }}
 
-      - name: Create release
-        uses: softprops/action-gh-release@v2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
         with:
-          files: release/*
-          generate_release_notes: true
+          tool: git-cliff
+
+      - name: Bump version and update changelog
+        run: |
+          set -euo pipefail
+          python3 scripts/bump_version.py "$NEXT_VERSION"
+          uv lock
+          # Prepends only the new section, so hand edits of earlier
+          # releases stay.
+          if ! grep -q "^## Release ${NEXT_VERSION#v}$" CHANGELOG.md; then
+            git cliff --unreleased --tag "$NEXT_VERSION" --prepend CHANGELOG.md
+          fi
+
+      - name: Push release branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml uv.lock CHANGELOG.md fromsoftware_troubleshooter/__init__.py
+          git commit -m "chore(release): FromSoftware Troubleshooter $NEXT_VERSION"
+          git push origin "HEAD:refs/heads/release-$NEXT_VERSION" --force
+
+  build-linux:
+    name: Build Linux
+    needs: [plan, release-branch]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.release-branch.result != 'failure' }}
+    runs-on: ubuntu-24.04
+    # The oldest supported Ubuntu LTS keeps the AppImage's glibc requirement
+    # at 2.35 instead of the runner's.
+    container: ubuntu:22.04
+    env:
+      # A uv-managed Python has a Tk without Xft, which renders bitmap fonts.
+      UV_PYTHON_DOWNLOADS: never
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git ca-certificates curl binutils file gnupg \
+            libtk8.6 libtcl8.6 libxft2 libxss1 libx11-6 libfontconfig1 \
+            libsqlite3-0 libffi8 libssl3 libbz2-1.0 liblzma5 zlib1g libncursesw6 \
+            libuuid1 libgdbm6
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.release == 'true' && format('release-{0}', needs.plan.outputs.next_version) || '' }}
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        env:
+          # The host tool cache holds a Python built for the host's glibc.
+          AGENT_TOOLSDIRECTORY: /opt/toolcache
+          PIP_NO_CACHE_DIR: "1"
+        with:
+          python-version-file: ".python-version"
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      - name: Import AppImage signing key
+        if: needs.plan.outputs.release == 'true'
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.APPIMAGE_GPG_PRIVATE_KEY }}
+        run: |
+          [ -n "$GPG_PRIVATE_KEY" ] || exit 0
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          fpr=$(gpg --list-secret-keys --with-colons | awk -F: '$1 == "fpr" { print $10; exit }')
+          echo "APPIMAGE_SIGN_KEY=$fpr" >> "$GITHUB_ENV"
+
+      - name: Build AppImage
+        env:
+          APPIMAGETOOL_SIGN_PASSPHRASE: ${{ secrets.APPIMAGE_GPG_PASSPHRASE }}
+        run: |
+          version=$(uv version --short)
+          uv run python -m PyInstaller --clean --noconfirm fromsoftware_troubleshooter_linux.spec
+          sh ./build_appimage.sh
+          mkdir -p release
+          mv "dist/FromSoftware-Troubleshooter-${version}-x86_64.AppImage" \
+            "release/FromSoftware-Troubleshooter_${version}_Linux.AppImage"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux
+          path: release/*.AppImage
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows
+    needs: [plan, release-branch]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.release-branch.result != 'failure' }}
+    runs-on: windows-latest
+    env:
+      CODE_SIGNING_CERT: ${{ secrets.CODE_SIGNING_CERT }}
+      CODE_SIGNING_PASSWORD: ${{ secrets.CODE_SIGNING_PASSWORD }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.release == 'true' && format('release-{0}', needs.plan.outputs.next_version) || '' }}
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version-file: ".python-version"
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      - name: Install dependencies
+        run: uv sync --locked --dev
+
+      - name: Build exe
+        run: uv run python -m PyInstaller --clean --noconfirm fromsoftware_troubleshooter_windows.spec
+
+      - name: Sign exe
+        if: env.CODE_SIGNING_CERT != '' && needs.plan.outputs.release == 'true'
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("sign.pfx", [Convert]::FromBase64String($env:CODE_SIGNING_CERT))
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\signtool\.exe$' } |
+            Select-Object -First 1
+          & $signtool sign /f sign.pfx /p $env:CODE_SIGNING_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "dist\FromSoftware Troubleshooter.exe"
+          $code = $LASTEXITCODE
+          Remove-Item sign.pfx
+          exit $code
+
+      - name: Zip
+        shell: pwsh
+        run: |
+          $version = uv version --short
+          New-Item -ItemType Directory -Force release | Out-Null
+          Compress-Archive -Path "dist\FromSoftware Troubleshooter.exe" `
+            -DestinationPath "release\FromSoftware-Troubleshooter_${version}_Windows.zip"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows
+          path: release/*.zip
+          if-no-files-found: error
+
+  finalize:
+    name: Release PR and draft release
+    needs: [plan, release-branch, build-linux, build-windows]
+    if: needs.plan.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      NEXT_VERSION: ${{ needs.plan.outputs.next_version }}
+      GH_TOKEN: ${{ secrets.PUSH_TOKEN || github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: release-${{ needs.plan.outputs.next_version }}
+          token: ${{ secrets.PUSH_TOKEN || github.token }}
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Extract changelog section
+        run: |
+          awk -v header="## Release ${NEXT_VERSION#v}" '
+            /^## Release / { keep = ($0 == header) }
+            keep { print }
+          ' CHANGELOG.md > release_notes.md
+          cat release_notes.md
+
+      - name: Create or update release PR
+        run: |
+          set -euo pipefail
+          branch="release-$NEXT_VERSION"
+          title="chore(release): FromSoftware Troubleshooter $NEXT_VERSION"
+          if gh pr view "$branch" --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit "$branch" --body-file release_notes.md
+          else
+            gh pr create --base master --head "$branch" --title "$title" --body-file release_notes.md
+          fi
+
+          # An open release PR for another version (e.g. v1.8.1 when a feat:
+          # commit moved the next version to v1.9.0) is folded into this one.
+          gh pr list --base master --state open --json number,headRefName \
+            --jq ".[] | select(.headRefName | test(\"^release-v[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\")) | select(.headRefName != \"$branch\") | \"\(.number) \(.headRefName)\"" |
+          while read -r number other; do
+            echo "Closing #$number ($other), superseded by $NEXT_VERSION"
+            gh pr close "$number" --delete-branch --comment "Superseded by $NEXT_VERSION."
+          done
+
+      - name: Create draft release
+        run: |
+          set -euo pipefail
+          # Drafts have no tag until they are published, so every draft is an
+          # earlier run of this workflow.
+          gh release list --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' |
+          while read -r tag; do
+            echo "Deleting draft $tag"
+            gh release delete "$tag" --yes
+          done
+
+          gh release create "$NEXT_VERSION" release/* \
+            --target "$(git rev-parse HEAD)" \
+            --title "$NEXT_VERSION" \
+            --notes-file release_notes.md \
+            --draft
