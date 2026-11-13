@@ -8,9 +8,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+PACKAGE = ROOT / "fromsoftware_troubleshooter"
 TARGETS = {
     ROOT / "pyproject.toml": r'(?m)^(version\s*=\s*")[^"]+(")',
-    ROOT / "fromsoftware_troubleshooter" / "__init__.py": r'(__version__\s*=\s*")[^"]+(")',
+    PACKAGE / "__init__.py": r'(__version__\s*=\s*")[^"]+(")',
 }
 
 
