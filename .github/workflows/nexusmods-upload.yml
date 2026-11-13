@@ -1,0 +1,123 @@
+# Uploads the Linux and Windows assets of a published GitHub release to
+# Nexus Mods, archiving the previous version of each file.
+#
+# Required:
+#   secret NEXUSMODS_API_KEY
+#   variables NEXUSMODS_FILE_ID_LINUX, NEXUSMODS_FILE_ID_WINDOWS
+#     (file group id of each existing file on the mod page)
+# Optional:
+#   variable NEXUSMODS_MOD_ID: v3 API mod id, (game id << 32) | page id.
+#     Set it to add the release notes to the Nexus changelog.
+
+name: Upload Release to Nexus Mods
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag to upload, for example v1.9.0
+        required: true
+        type: string
+
+concurrency:
+  group: nexusmods-${{ github.event.release.tag_name || inputs.version }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: Upload ${{ matrix.platform }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - platform: Linux
+            suffix: Linux.AppImage
+          - platform: Windows
+            suffix: Windows.zip
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.release.tag_name || inputs.version }}
+      FILE_GROUP_ID: ${{ matrix.platform == 'Linux' && vars.NEXUSMODS_FILE_ID_LINUX || vars.NEXUSMODS_FILE_ID_WINDOWS }}
+      NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+    steps:
+      - name: Check configuration
+        run: |
+          if [ -z "$NEXUSMODS_API_KEY" ]; then
+            echo "::error::Missing secret NEXUSMODS_API_KEY"
+            exit 1
+          fi
+          if [ -z "$FILE_GROUP_ID" ]; then
+            echo "::error::Missing variable NEXUSMODS_FILE_ID_${{ matrix.platform == 'Linux' && 'LINUX' || 'WINDOWS' }}"
+            exit 1
+          fi
+
+      - name: Download release asset
+        id: asset
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          asset="FromSoftware-Troubleshooter_${version}_${{ matrix.suffix }}"
+          mkdir -p upload
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$asset" --dir upload
+          if [ "${{ matrix.platform }}" = Linux ]; then
+            # Nexus Mods accepts archives only; zip keeps the exec bit.
+            (cd upload && zip "${asset%.AppImage}.zip" "$asset")
+            asset="${asset%.AppImage}.zip"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "file=upload/$asset" >> "$GITHUB_OUTPUT"
+
+      # Nexus appends changelog text on every call for a version, so only one
+      # platform sends it.
+      - name: Build changelog
+        id: changelog
+        if: matrix.platform == 'Windows' && vars.NEXUSMODS_MOD_ID != ''
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          # Drops headings, the "Full Changelog" link and the " by @user in
+          # <PR url>" tail of GitHub's generated notes.
+          text=$(python3 - notes.md <<'PY'
+          import re, sys
+          for line in open(sys.argv[1], encoding="utf-8"):
+              line = line.strip()
+              if not line or line.startswith(("#", "**Full Changelog**")):
+                  continue
+              if line.startswith(("* ", "- ")):
+                  line = line[2:]
+              line = re.sub(r" by @\S+ in https://\S+$", "", line)
+              line = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", line)
+              if line:
+                  print(line)
+          PY
+          )
+          {
+            echo "text<<NEXUS_CHANGELOG_EOF"
+            echo "$text"
+            echo "NEXUS_CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Nexus Mods
+        uses: Nexus-Mods/upload-action@v1.0.0-beta.11
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: ${{ env.FILE_GROUP_ID }}
+          filename: ${{ steps.asset.outputs.file }}
+          display_name: FromSoftware Troubleshooter ${{ steps.asset.outputs.version }} - ${{ matrix.platform }}
+          description: |
+            FromSoftware Troubleshooter ${{ env.TAG }} (${{ matrix.platform }}).
+            Source release: https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG }}
+          version: ${{ steps.asset.outputs.version }}
+          update_mod_version: true
+          archive_existing_version: true
+          allow_mod_manager_download: false
+          mod_id: ${{ steps.changelog.outputs.text != '' && vars.NEXUSMODS_MOD_ID || '' }}
+          changelog: ${{ steps.changelog.outputs.text }}
