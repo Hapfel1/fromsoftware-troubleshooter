@@ -75,30 +75,38 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "file=upload/$asset" >> "$GITHUB_OUTPUT"
 
+      - name: Check out changelog script
+        if: matrix.platform == 'Windows' && vars.NEXUSMODS_MOD_ID != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/nexus_changelog.py
+          sparse-checkout-cone-mode: false
+          path: src
+
       # Nexus appends changelog text on every call for a version, so only one
-      # platform sends it.
+      # platform sends it. The text is the version's CHANGELOG.md section on
+      # the release branch, then on master (a release can be published before
+      # or after its PR is merged), else the release notes.
       - name: Build changelog
         id: changelog
         if: matrix.platform == 'Windows' && vars.NEXUSMODS_MOD_ID != ''
         run: |
           set -euo pipefail
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
-          # Drops headings, the "Full Changelog" link and the " by @user in
-          # <PR url>" tail of GitHub's generated notes.
-          text=$(python3 - notes.md <<'PY'
-          import re, sys
-          for line in open(sys.argv[1], encoding="utf-8"):
-              line = line.strip()
-              if not line or line.startswith(("#", "**Full Changelog**")):
-                  continue
-              if line.startswith(("* ", "- ")):
-                  line = line[2:]
-              line = re.sub(r" by @\S+ in https://\S+$", "", line)
-              line = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", line)
-              if line:
-                  print(line)
-          PY
-          )
+          : > notes.md
+          for ref in "release-v${TAG#v}" master; do
+            if gh api "repos/$GITHUB_REPOSITORY/contents/CHANGELOG.md?ref=$ref" \
+              -H "Accept: application/vnd.github.raw" > CHANGELOG.md 2>/dev/null; then
+              awk -v header="## Release ${TAG#v}" '
+                /^## Release / { keep = ($0 == header) }
+                keep { print }
+              ' CHANGELOG.md > notes.md
+            fi
+            [ -s notes.md ] && break
+          done
+          if [ ! -s notes.md ]; then
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          fi
+          text=$(python3 src/scripts/nexus_changelog.py < notes.md)
           {
             echo "text<<NEXUS_CHANGELOG_EOF"
             echo "$text"
