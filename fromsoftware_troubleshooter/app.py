@@ -624,9 +624,11 @@ class TroubleshooterApp:
         self._linux_launch_options_btn.configure(text="Copied!")
         self.root.after(
             1500,
-            lambda: self._linux_launch_options_btn
-            and self._linux_launch_options_btn.configure(
-                text="Copy Linux Launch Options"
+            lambda: (
+                self._linux_launch_options_btn
+                and self._linux_launch_options_btn.configure(
+                    text="Copy Linux Launch Options"
+                )
             ),
         )
 

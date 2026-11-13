@@ -579,9 +579,7 @@ def autoscan(manifest_key: str) -> tuple[Path | None, Path | None]:
     return find_game_folder(manifest_key), find_save_file(manifest_key)
 
 
-def get_linux_launch_options(
-    manifest_key: str, game_folder: Path | None
-) -> str | None:
+def get_linux_launch_options(manifest_key: str, game_folder: Path | None) -> str | None:
     """Build Steam Linux launch options for the detected game's library."""
     app_id = _APP_IDS.get(manifest_key)
     if not app_id or not game_folder:
